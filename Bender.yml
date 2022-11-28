@@ -6,7 +6,7 @@
 # Christopher Reinwardt <creinwar@student.ethz.ch>
 
 package:
-  name: axi-vga
+  name: axi_vga
   authors:
     - "Nicole Narr <narrn@student.ethz.ch>"
     - "Christopher Reinwardt <creinwar@student.ethz.ch>"
