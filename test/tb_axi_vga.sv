@@ -113,7 +113,7 @@ module tb_axi_vga;
     assert (!bus_error) else $error("Not able to write cfg reg");
 
     // Low end of start address of frame buffer
-    tb_reg_driver.send_write(48'h28, 32'h80000000, 4'hf, bus_error);
+    tb_reg_driver.send_write(48'h28, 32'h800007F0, 4'hf, bus_error);
     assert (!bus_error) else $error("Not able to write cfg reg");
     // High end of start address of frame buffer
     tb_reg_driver.send_write(48'h2c, 32'h0, 4'hf, bus_error);

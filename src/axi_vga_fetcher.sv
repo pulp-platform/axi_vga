@@ -49,13 +49,14 @@ module axi_vga_fetcher #(
   axi_req_t axi_req;
   axi_resp_t axi_resp;
 
-  logic [AXIAddrWidth-1:0] req_addr_q, req_addr_d, start_addr;
+  logic [AXIAddrWidth-1:0] addr_page_mask, start_addr;
+  logic [AXIAddrWidth-1:0] req_addr_q, req_addr_d;
   logic [AXIDataWidth-1:0] new_beat_data_q, new_beat_data_d;
   logic [AXIDataWidth-1:0] old_beat_data_q, old_beat_data_d;
     
   logic [AXIAddrWidth-1:0] frame_start_q, frame_start_d;
-  logic [31:0] frame_size_q, frame_size_d;
-  logic [7:0]  burst_len_q, burst_len_d;
+  logic [31:0] frame_size_q, frame_size_d, remaining_len;
+  logic [7:0]  burst_len_q, burst_len_d, last_len_d, last_len_q;
 
   logic resp_last_q;
 
@@ -79,6 +80,13 @@ module axi_vga_fetcher #(
   localparam int zero_repl = (AXIAddrWidth > 64) ? AXIAddrWidth - 64 : 0;
   assign start_addr = (AXIAddrWidth <= 64) ? start_addr_i[AXIAddrWidth-1:0] : {{zero_repl{1'b0}}, start_addr_i};
 
+  // Create an AXIAddrWidth wide mask to ignore the lower 12 bit
+  localparam int page_remaining_bits = AXIAddrWidth - 12;
+  assign addr_page_mask = {{page_remaining_bits{1'b1}}, 12'h0};
+
+  // How many bytes of a frame are left
+  assign remaining_len  = frame_size_q-(req_addr_q-frame_start_q);
+
   assign blue_o   = old_beat_data_q[offset_q[AXIStrbWidthClog2+3-1:0] +:BlueWidth];
   assign green_o  = old_beat_data_q[offset_q[AXIStrbWidthClog2+3-1:0] + BlueWidth+:GreenWidth];
   assign red_o    = old_beat_data_q[offset_q[AXIStrbWidthClog2+3-1:0] + BlueWidth+ GreenWidth+:RedWidth];
@@ -88,6 +96,7 @@ module axi_vga_fetcher #(
     frame_start_d     = frame_start_q;
     frame_size_d      = frame_size_q;
     burst_len_d       = burst_len_q;
+    last_len_d        = last_len_q;
     first_req_d       = first_req_q;
     req_state_d       = req_state_q;
     req_addr_d        = req_addr_q;
@@ -107,15 +116,24 @@ module axi_vga_fetcher #(
         if(enable_i) begin
           axi_req.ar_valid = 1'b1;
 
-          // TODO: A burst may not cross a 4 kB boundary!
-          if(req_addr_q < frame_start_q+frame_size_q-((burst_len_q+1)*AXIStrbWidth)) begin
-            // Not the last request of frame
-            axi_req.ar.len = burst_len_q;
-
+          if(remaining_len > (burst_len_q+1)*AXIStrbWidth) begin
+            if(req_addr_q[AXIAddrWidth-1:12] == ((req_addr_q + (burst_len_q+1)*AXIStrbWidth) >> 12)) begin
+              // Not the last request of frame
+              axi_req.ar.len = burst_len_q;
+              last_len_d     = burst_len_q;
+            end else begin
+              axi_req.ar.len = ((((req_addr_q + 4096) & addr_page_mask) - req_addr_q) >> AXIStrbWidthClog2)-1;
+              last_len_d     = ((((req_addr_q + 4096) & addr_page_mask) - req_addr_q) >> AXIStrbWidthClog2)-1;
+            end
           end else begin
-            // Last request of frame
-            // This assumes a framebuffer size that is a multiple of the transfer unit (i.e. burst size)
-            axi_req.ar.len = ((frame_size_q-(req_addr_q-frame_start_q)) >> AXIStrbWidthClog2)-1;
+            if(req_addr_q[AXIAddrWidth-1:12] == ((req_addr_q + remaining_len) >> 12)) begin
+              // Last part of frame is within 4k boundary
+              axi_req.ar.len = (remaining_len >> AXIStrbWidthClog2)-1;
+              last_len_d     = (remaining_len >> AXIStrbWidthClog2)-1;
+            end else begin
+              axi_req.ar.len = ((((req_addr_q + 4096) & addr_page_mask) - req_addr_q) >> AXIStrbWidthClog2)-1;
+              last_len_d     = ((((req_addr_q + 4096) & addr_page_mask) - req_addr_q) >> AXIStrbWidthClog2)-1;
+            end
           end
 
           if(axi_resp.ar_ready) begin
@@ -140,14 +158,14 @@ module axi_vga_fetcher #(
           if((axi_resp.r_valid & axi_resp.r.last & !resp_last_q) | first_req_q) begin
             req_state_d = REQ;
             first_req_d = 1'b0;
-            if((req_addr_q >= frame_start_q+frame_size_q-((burst_len_q+1)*AXIStrbWidth))) begin 
+            if((req_addr_q >= frame_start_q+frame_size_q-((last_len_q+1)*AXIStrbWidth))) begin 
               // Was last REQ
               frame_start_d = start_addr;
               frame_size_d = frame_size_i;
               burst_len_d = burst_len_i;
               req_addr_d = start_addr;
             end else begin
-              req_addr_d = req_addr_q + ((burst_len_q+1)*AXIStrbWidth);
+              req_addr_d = req_addr_q + ((last_len_q+1)*AXIStrbWidth);
             end
           end
         end else begin
@@ -263,6 +281,7 @@ module axi_vga_fetcher #(
       frame_start_q           <= '0;
       frame_size_q            <= '0;
       burst_len_q             <= '0;
+      last_len_q              <= '0;
       first_req_q             <= 1'b1;
       req_state_q             <= REQ;
       req_addr_q              <= '0;
@@ -282,6 +301,7 @@ module axi_vga_fetcher #(
       frame_start_q           <= frame_start_d;
       frame_size_q            <= frame_size_d;
       burst_len_q             <= burst_len_d;
+      last_len_q              <= last_len_d;
       first_req_q             <= first_req_d;
       req_state_q             <= req_state_d;
       req_addr_q              <= req_addr_d;
