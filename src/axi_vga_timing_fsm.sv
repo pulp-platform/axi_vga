@@ -44,7 +44,6 @@ module axi_vga_timing_fsm #(
   logic visible;
 
   logic fsm_en;
-  logic [7:0] clk_div;
 
   logic [31:0] h_visible_size, h_front_size, h_sync_size, h_back_size;
   logic [31:0] v_visible_size, v_front_size, v_sync_size, v_back_size;
@@ -65,14 +64,14 @@ module axi_vga_timing_fsm #(
   assign fsm_en = reg2hw_i.control.enable.q & fsm_en_i;
 
   assign h_visible_size = reg2hw_i.hori_visible_size.q;
-  assign h_front_size = reg2hw_i.hori_front_porch_size.q;
-  assign h_sync_size = reg2hw_i.hori_sync_size.q;
-  assign h_back_size = reg2hw_i.hori_back_porch_size.q;
+  assign h_front_size   = reg2hw_i.hori_front_porch_size.q;
+  assign h_sync_size    = reg2hw_i.hori_sync_size.q;
+  assign h_back_size    = reg2hw_i.hori_back_porch_size.q;
 
   assign v_visible_size = reg2hw_i.vert_visible_size.q;
-  assign v_front_size = reg2hw_i.vert_front_porch_size.q;
-  assign v_sync_size = reg2hw_i.vert_sync_size.q;
-  assign v_back_size = reg2hw_i.vert_back_porch_size.q;
+  assign v_front_size   = reg2hw_i.vert_front_porch_size.q;
+  assign v_sync_size    = reg2hw_i.vert_sync_size.q;
+  assign v_back_size    = reg2hw_i.vert_back_porch_size.q;
 
   // Horizontal FSM
   always_comb begin
@@ -82,7 +81,6 @@ module axi_vga_timing_fsm #(
         
     if (fsm_en) begin
       hcounter_d  = hcounter_q - 1;
-      hstate_d    = hstate_q;
 
       unique case (hstate_q)
         VISIBLE: begin
@@ -129,7 +127,6 @@ module axi_vga_timing_fsm #(
     vcounter_d  = vcounter_q;
 
     if (fsm_en && hstate_q == BACK_PORCH && hcounter_q == 1) begin
-      vstate_d    = vstate_q;
       vcounter_d  = vcounter_q - 1;
 
       unique case (vstate_q)
@@ -174,8 +171,8 @@ module axi_vga_timing_fsm #(
   // Flip-Flops
   always_ff @(posedge clk_i, negedge rst_ni) begin
     if(!rst_ni) begin
-      hcounter_q  <= h_back_size;
-      vcounter_q  <= v_back_size;
+      hcounter_q  <= 'd1;
+      vcounter_q  <= 'd1;
       hstate_q    <= BACK_PORCH;
       vstate_q    <= BACK_PORCH;
     end else begin

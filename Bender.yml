@@ -12,8 +12,8 @@ package:
     - "Christopher Reinwardt <creinwar@student.ethz.ch>"
 
 dependencies:
-  axi: { git: "https://github.com/pulp-platform/axi", version: 0.35.1 }
-  common_cells : { git: "https://github.com/pulp-platform/common_cells", version: 1.24.1 }
+  axi: { git: "https://github.com/pulp-platform/axi", version: 0.38.0 }
+  common_cells: { git: "https://github.com/pulp-platform/common_cells", version: 1.28.0 }
   register_interface : { git: "https://github.com/pulp-platform/register_interface", version: 0.3.3 }
 
 sources:
