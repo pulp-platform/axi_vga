@@ -43,7 +43,8 @@ module axi_vga #(
 );
     
   logic [7:0] clk_div;
-  logic [7:0] clk_cycle_count;
+  logic [7:0] clk_cnt_d, clk_cnt_q;
+
   axi_vga_register_file_reg_pkg::axi_vga_register_file_reg2hw_t reg2hw;
 
   logic [RedWidth-1:0]   red;
@@ -52,30 +53,10 @@ module axi_vga #(
   logic valid, ready;
 
   // Clock divider constant
-  assign clk_div = reg2hw.clk_div.q;
+  assign clk_div = |reg2hw.clk_div.q ? reg2hw.clk_div.q : 1;
 
-  // Clock divider to get the pixel clock
-  clk_int_div #(
-    .DIV_VALUE_WIDTH       ( 8              ),
-    .DEFAULT_DIV_VALUE     ( 8              ),
-    .ENABLE_CLOCK_IN_RESET ( 1'b0           )
-  ) i_pixel_clk_div (
-    .clk_i,
-    .rst_ni,
-
-    .en_i             ( 1'b1                ),
-
-    .test_mode_en_i,
-
-    .div_i            ( clk_div             ),
-
-    .div_valid_i      ( 1'b1                ),
-    .div_ready_o      (                     ),
-
-    .clk_o            (                     ),
-
-    .cycl_count_o     ( clk_cycle_count     )
-  );
+  // Cycle counter to scale the incoming clock
+  assign clk_cnt_d = (clk_cnt_q < (clk_div-1)) ? clk_cnt_q + 8'b1 : 8'b0;
 
   // Regbus register interface
   axi_vga_register_file_reg_top #(
@@ -90,7 +71,7 @@ module axi_vga #(
       // To HW
       .reg2hw         ( reg2hw              ), // Write
       // Config
-      .devmode_i      ( '0                  )  // If 1, explicit error return for unmapped register access
+      .devmode_i      ( '1                  )  // If 1, explicit error return for unmapped register access
   );
 
   // FSM managing the VGA signals
@@ -104,7 +85,7 @@ module axi_vga #(
       .clk_i,
       .rst_ni,
 
-      .fsm_en_i       ( clk_cycle_count == 0),
+      .fsm_en_i       ( clk_cnt_q == 0      ),
       .reg2hw_i       ( reg2hw              ),
 
       // Data input
@@ -148,6 +129,15 @@ module axi_vga #(
       .valid_o        ( valid               ),
       .ready_i        ( ready               )
   );
+
+  // Cycle counter register
+  always_ff @(posedge clk_i, negedge rst_ni) begin
+    if(~rst_ni) begin
+      clk_cnt_q <= '0;
+    end else begin
+      clk_cnt_q <= clk_cnt_d;
+    end
+  end
 
 
    /////////////////////
