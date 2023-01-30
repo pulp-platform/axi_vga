@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
+## 0.1.1 - 2023-01-30
+### Fixed
+- Fix typo in GNU Make fragment root variable
+
 ## 0.1.0 - 2023-01-30
 ### Added
 - Add Makefrag and CI linting for licensing, RTL, and build.
