@@ -14,7 +14,7 @@ BENDER 	?= bender
 PYTHON3	?= /usr/bin/env python3
 REGTOOL	?= $(shell $(BENDER) path register_interface)/vendor/lowrisc_opentitan/util/regtool.py
 
-AXI_TLB_ROOT       ?= $(shell $(BENDER) path axi_vga)
+AXI_VGA_ROOT ?= $(shell $(BENDER) path axi_vga)
 
 $(AXI_VGA_ROOT)/sw/include:
 	mkdir -p $@
