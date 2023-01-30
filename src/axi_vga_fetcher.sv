@@ -38,7 +38,7 @@ module axi_vga_fetcher #(
 );
 
   localparam int unsigned PixelWidth = RedWidth + GreenWidth + BlueWidth;
-  logic [15:0] offset_q, offset_d; 
+  logic [15:0] offset_q, offset_d;
 
   typedef enum logic       {R_IDLE, REQ} req_state_t;
   typedef enum logic       {ACCEPT, A_IDLE} accept_state_t;
@@ -53,7 +53,7 @@ module axi_vga_fetcher #(
   logic [AXIAddrWidth-1:0] req_addr_q, req_addr_d;
   logic [AXIDataWidth-1:0] new_beat_data_q, new_beat_data_d;
   logic [AXIDataWidth-1:0] old_beat_data_q, old_beat_data_d;
-    
+
   logic [AXIAddrWidth-1:0] frame_start_q, frame_start_d;
   logic [31:0] frame_size_q, frame_size_d, remaining_len;
   logic [7:0]  burst_len_q, burst_len_d, last_len_d, last_len_q;
@@ -77,19 +77,21 @@ module axi_vga_fetcher #(
   assign axi_req.b_ready = '0;
 
   // Truncate or extend the fixed 64 bit we get from the regfile to the actual address width
-  localparam int zero_repl = (AXIAddrWidth > 64) ? AXIAddrWidth - 64 : 0;
-  assign start_addr = (AXIAddrWidth <= 64) ? start_addr_i[AXIAddrWidth-1:0] : {{zero_repl{1'b0}}, start_addr_i};
+  localparam int ZeroRepl = (AXIAddrWidth > 64) ? AXIAddrWidth - 64 : 0;
+  assign start_addr = (AXIAddrWidth <= 64) ?
+      start_addr_i[AXIAddrWidth-1:0] : {{ZeroRepl{1'b0}}, start_addr_i};
 
   // Create an AXIAddrWidth wide mask to ignore the lower 12 bit
-  localparam int page_remaining_bits = AXIAddrWidth - 12;
-  assign addr_page_mask = {{page_remaining_bits{1'b1}}, 12'h0};
+  localparam int PageRemainingBits = AXIAddrWidth - 12;
+  assign addr_page_mask = {{PageRemainingBits{1'b1}}, 12'h0};
 
   // How many bytes of a frame are left
   assign remaining_len  = frame_size_q-(req_addr_q-frame_start_q);
 
   assign blue_o   = old_beat_data_q[offset_q[AXIStrbWidthClog2+3-1:0] +:BlueWidth];
-  assign green_o  = old_beat_data_q[offset_q[AXIStrbWidthClog2+3-1:0] + BlueWidth+:GreenWidth];
-  assign red_o    = old_beat_data_q[offset_q[AXIStrbWidthClog2+3-1:0] + BlueWidth+ GreenWidth+:RedWidth];
+  assign green_o  = old_beat_data_q[offset_q[AXIStrbWidthClog2+3-1:0] + BlueWidth +:GreenWidth];
+  assign red_o    = old_beat_data_q[offset_q[AXIStrbWidthClog2+3-1:0]
+      + BlueWidth + GreenWidth +:RedWidth];
 
   // FSM to send requests
   always_comb begin
@@ -100,7 +102,7 @@ module axi_vga_fetcher #(
     first_req_d       = first_req_q;
     req_state_d       = req_state_q;
     req_addr_d        = req_addr_q;
-    
+
     axi_req.ar        = '0;
     axi_req.ar.addr   = req_addr_q;
     axi_req.ar.burst  = 2'b01;    // Increasing burst
@@ -117,13 +119,16 @@ module axi_vga_fetcher #(
           axi_req.ar_valid = 1'b1;
 
           if(remaining_len > (burst_len_q+1)*AXIStrbWidth) begin
-            if(req_addr_q[AXIAddrWidth-1:12] == ((req_addr_q + (burst_len_q+1)*AXIStrbWidth) >> 12)) begin
+            if(req_addr_q[AXIAddrWidth-1:12] ==
+                ((req_addr_q + (burst_len_q+1)*AXIStrbWidth) >> 12)) begin
               // Not the last request of frame
               axi_req.ar.len = burst_len_q;
               last_len_d     = burst_len_q;
             end else begin
-              axi_req.ar.len = ((((req_addr_q + 4096) & addr_page_mask) - req_addr_q) >> AXIStrbWidthClog2)-1;
-              last_len_d     = ((((req_addr_q + 4096) & addr_page_mask) - req_addr_q) >> AXIStrbWidthClog2)-1;
+              axi_req.ar.len =
+                ((((req_addr_q + 4096) & addr_page_mask) - req_addr_q) >> AXIStrbWidthClog2)-1;
+              last_len_d     =
+                ((((req_addr_q + 4096) & addr_page_mask) - req_addr_q) >> AXIStrbWidthClog2)-1;
             end
           end else begin
             if(req_addr_q[AXIAddrWidth-1:12] == ((req_addr_q + remaining_len) >> 12)) begin
@@ -131,8 +136,10 @@ module axi_vga_fetcher #(
               axi_req.ar.len = (remaining_len >> AXIStrbWidthClog2)-1;
               last_len_d     = (remaining_len >> AXIStrbWidthClog2)-1;
             end else begin
-              axi_req.ar.len = ((((req_addr_q + 4096) & addr_page_mask) - req_addr_q) >> AXIStrbWidthClog2)-1;
-              last_len_d     = ((((req_addr_q + 4096) & addr_page_mask) - req_addr_q) >> AXIStrbWidthClog2)-1;
+              axi_req.ar.len =
+                ((((req_addr_q + 4096) & addr_page_mask) - req_addr_q) >> AXIStrbWidthClog2)-1;
+              last_len_d     =
+                ((((req_addr_q + 4096) & addr_page_mask) - req_addr_q) >> AXIStrbWidthClog2)-1;
             end
           end
 
@@ -158,7 +165,7 @@ module axi_vga_fetcher #(
           if((axi_resp.r_valid & axi_resp.r.last & !resp_last_q) | first_req_q) begin
             req_state_d = REQ;
             first_req_d = 1'b0;
-            if((req_addr_q >= frame_start_q+frame_size_q-((last_len_q+1)*AXIStrbWidth))) begin 
+            if((req_addr_q >= frame_start_q+frame_size_q-((last_len_q+1)*AXIStrbWidth))) begin
               // Was last REQ
               frame_start_d = start_addr;
               frame_size_d = frame_size_i;
@@ -184,13 +191,13 @@ module axi_vga_fetcher #(
     accept_state_d = accept_state_q;
     axi_req.r_ready = 1'b0;
     new_beat_data_d = new_beat_data_q;
-        
+
     unique case (accept_state_q)
       ACCEPT: begin
         axi_req.r_ready = 1'b1;
         if(axi_resp.r_valid) begin // TODO check req.r.resp
           new_beat_data_d = axi_resp.r.data; // Buffer beat to be processed after current one
-          if((offset_q >> (AXIStrbWidthClog2+3)) > 1) begin 
+          if((offset_q >> (AXIStrbWidthClog2+3)) > 1) begin
             accept_state_d = ACCEPT;
           end else accept_state_d = A_IDLE;
         end
@@ -225,9 +232,9 @@ module axi_vga_fetcher #(
     end else begin
       if(!init_done_q & axi_resp.r_valid) begin
         if(offset_q == AXIDataWidth) begin
-          valid_d = 1'b1; 
+          valid_d = 1'b1;
         end else begin
-          valid_d = 1'b0; 
+          valid_d = 1'b0;
         end
         old_beat_data_d   = axi_resp.r.data;
         process_started_d = 1'b1;
@@ -236,16 +243,16 @@ module axi_vga_fetcher #(
 
       if(init_done_q) begin
         process_started_d = 1'b0;
-        
+
         if(ready_i) begin
-          if(offset_q[AXIStrbWidthClog2+3-1:0] == AXIDataWidth-PixelWidth) begin 
+          if(offset_q[AXIStrbWidthClog2+3-1:0] == AXIDataWidth-PixelWidth) begin
             // was last pixel of beat
             old_beat_data_d   = new_beat_data_q;
             process_started_d = 1'b1;
             if(offset_q == AXIDataWidth-PixelWidth) begin
-              valid_d = 1'b1; 
+              valid_d = 1'b1;
             end else begin
-              valid_d = 1'b0; 
+              valid_d = 1'b0;
             end
           end
         end
@@ -262,12 +269,13 @@ module axi_vga_fetcher #(
         offset_d = offset_q + PixelWidth; // Default when we sent out a pixel
 
         // We send out a pixel and at the same time fetch the next beat
-        if((accept_state_q == ACCEPT) & (axi_resp.r_valid) & (offset_q >= AXIDataWidth)) begin
+        if ((accept_state_q == ACCEPT) & (axi_resp.r_valid) & (offset_q >= AXIDataWidth)) begin
           offset_d = offset_q - AXIDataWidth + PixelWidth;
         end
-    
+
       // We fetched the next beat
-      end else if((accept_state_q == ACCEPT) & (axi_resp.r_valid) & (offset_q >= AXIDataWidth)) begin
+      end else if
+          ((accept_state_q == ACCEPT) & (axi_resp.r_valid) & (offset_q >= AXIDataWidth)) begin
         offset_d = offset_q - AXIDataWidth;
       end
     end else begin
@@ -285,7 +293,7 @@ module axi_vga_fetcher #(
       first_req_q             <= 1'b1;
       req_state_q             <= REQ;
       req_addr_q              <= '0;
-            
+
       init_done_q             <= 0;
       process_started_q       <= 0;
       process_started_last    <= 0;
@@ -314,7 +322,7 @@ module axi_vga_fetcher #(
       accept_state_q          <= accept_state_d;
       old_beat_data_q         <= old_beat_data_d;
       new_beat_data_q         <= new_beat_data_d;
-  
+
       offset_q                <= offset_d;
       resp_last_q             <= axi_resp.r.last;
     end

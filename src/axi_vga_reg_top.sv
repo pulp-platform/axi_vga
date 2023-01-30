@@ -7,7 +7,7 @@
 
 `include "common_cells/assertions.svh"
 
-module axi_vga_register_file_reg_top #(
+module axi_vga_reg_top #(
   parameter type reg_req_t = logic,
   parameter type reg_rsp_t = logic,
   parameter int AW = 6
@@ -17,14 +17,14 @@ module axi_vga_register_file_reg_top #(
   input  reg_req_t reg_req_i,
   output reg_rsp_t reg_rsp_o,
   // To HW
-  output axi_vga_register_file_reg_pkg::axi_vga_register_file_reg2hw_t reg2hw, // Write
+  output axi_vga_reg_pkg::axi_vga_reg2hw_t reg2hw, // Write
 
 
   // Config
   input devmode_i // If 1, explicit error return for unmapped register access
 );
 
-  import axi_vga_register_file_reg_pkg::* ;
+  import axi_vga_reg_pkg::* ;
 
   localparam int DW = 32;
   localparam int DBW = DW/8;                    // Byte Width
@@ -553,20 +553,20 @@ module axi_vga_register_file_reg_top #(
   logic [13:0] addr_hit;
   always_comb begin
     addr_hit = '0;
-    addr_hit[ 0] = (reg_addr == AXI_VGA_REGISTER_FILE_CONTROL_OFFSET);
-    addr_hit[ 1] = (reg_addr == AXI_VGA_REGISTER_FILE_CLK_DIV_OFFSET);
-    addr_hit[ 2] = (reg_addr == AXI_VGA_REGISTER_FILE_HORI_VISIBLE_SIZE_OFFSET);
-    addr_hit[ 3] = (reg_addr == AXI_VGA_REGISTER_FILE_HORI_FRONT_PORCH_SIZE_OFFSET);
-    addr_hit[ 4] = (reg_addr == AXI_VGA_REGISTER_FILE_HORI_SYNC_SIZE_OFFSET);
-    addr_hit[ 5] = (reg_addr == AXI_VGA_REGISTER_FILE_HORI_BACK_PORCH_SIZE_OFFSET);
-    addr_hit[ 6] = (reg_addr == AXI_VGA_REGISTER_FILE_VERT_VISIBLE_SIZE_OFFSET);
-    addr_hit[ 7] = (reg_addr == AXI_VGA_REGISTER_FILE_VERT_FRONT_PORCH_SIZE_OFFSET);
-    addr_hit[ 8] = (reg_addr == AXI_VGA_REGISTER_FILE_VERT_SYNC_SIZE_OFFSET);
-    addr_hit[ 9] = (reg_addr == AXI_VGA_REGISTER_FILE_VERT_BACK_PORCH_SIZE_OFFSET);
-    addr_hit[10] = (reg_addr == AXI_VGA_REGISTER_FILE_START_ADDR_LOW_OFFSET);
-    addr_hit[11] = (reg_addr == AXI_VGA_REGISTER_FILE_START_ADDR_HIGH_OFFSET);
-    addr_hit[12] = (reg_addr == AXI_VGA_REGISTER_FILE_FRAME_SIZE_OFFSET);
-    addr_hit[13] = (reg_addr == AXI_VGA_REGISTER_FILE_BURST_LEN_OFFSET);
+    addr_hit[ 0] = (reg_addr == AXI_VGA_CONTROL_OFFSET);
+    addr_hit[ 1] = (reg_addr == AXI_VGA_CLK_DIV_OFFSET);
+    addr_hit[ 2] = (reg_addr == AXI_VGA_HORI_VISIBLE_SIZE_OFFSET);
+    addr_hit[ 3] = (reg_addr == AXI_VGA_HORI_FRONT_PORCH_SIZE_OFFSET);
+    addr_hit[ 4] = (reg_addr == AXI_VGA_HORI_SYNC_SIZE_OFFSET);
+    addr_hit[ 5] = (reg_addr == AXI_VGA_HORI_BACK_PORCH_SIZE_OFFSET);
+    addr_hit[ 6] = (reg_addr == AXI_VGA_VERT_VISIBLE_SIZE_OFFSET);
+    addr_hit[ 7] = (reg_addr == AXI_VGA_VERT_FRONT_PORCH_SIZE_OFFSET);
+    addr_hit[ 8] = (reg_addr == AXI_VGA_VERT_SYNC_SIZE_OFFSET);
+    addr_hit[ 9] = (reg_addr == AXI_VGA_VERT_BACK_PORCH_SIZE_OFFSET);
+    addr_hit[10] = (reg_addr == AXI_VGA_START_ADDR_LOW_OFFSET);
+    addr_hit[11] = (reg_addr == AXI_VGA_START_ADDR_HIGH_OFFSET);
+    addr_hit[12] = (reg_addr == AXI_VGA_FRAME_SIZE_OFFSET);
+    addr_hit[13] = (reg_addr == AXI_VGA_BURST_LEN_OFFSET);
   end
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;
@@ -574,20 +574,20 @@ module axi_vga_register_file_reg_top #(
   // Check sub-word write is permitted
   always_comb begin
     wr_err = (reg_we &
-              ((addr_hit[ 0] & (|(AXI_VGA_REGISTER_FILE_PERMIT[ 0] & ~reg_be))) |
-               (addr_hit[ 1] & (|(AXI_VGA_REGISTER_FILE_PERMIT[ 1] & ~reg_be))) |
-               (addr_hit[ 2] & (|(AXI_VGA_REGISTER_FILE_PERMIT[ 2] & ~reg_be))) |
-               (addr_hit[ 3] & (|(AXI_VGA_REGISTER_FILE_PERMIT[ 3] & ~reg_be))) |
-               (addr_hit[ 4] & (|(AXI_VGA_REGISTER_FILE_PERMIT[ 4] & ~reg_be))) |
-               (addr_hit[ 5] & (|(AXI_VGA_REGISTER_FILE_PERMIT[ 5] & ~reg_be))) |
-               (addr_hit[ 6] & (|(AXI_VGA_REGISTER_FILE_PERMIT[ 6] & ~reg_be))) |
-               (addr_hit[ 7] & (|(AXI_VGA_REGISTER_FILE_PERMIT[ 7] & ~reg_be))) |
-               (addr_hit[ 8] & (|(AXI_VGA_REGISTER_FILE_PERMIT[ 8] & ~reg_be))) |
-               (addr_hit[ 9] & (|(AXI_VGA_REGISTER_FILE_PERMIT[ 9] & ~reg_be))) |
-               (addr_hit[10] & (|(AXI_VGA_REGISTER_FILE_PERMIT[10] & ~reg_be))) |
-               (addr_hit[11] & (|(AXI_VGA_REGISTER_FILE_PERMIT[11] & ~reg_be))) |
-               (addr_hit[12] & (|(AXI_VGA_REGISTER_FILE_PERMIT[12] & ~reg_be))) |
-               (addr_hit[13] & (|(AXI_VGA_REGISTER_FILE_PERMIT[13] & ~reg_be)))));
+              ((addr_hit[ 0] & (|(AXI_VGA_PERMIT[ 0] & ~reg_be))) |
+               (addr_hit[ 1] & (|(AXI_VGA_PERMIT[ 1] & ~reg_be))) |
+               (addr_hit[ 2] & (|(AXI_VGA_PERMIT[ 2] & ~reg_be))) |
+               (addr_hit[ 3] & (|(AXI_VGA_PERMIT[ 3] & ~reg_be))) |
+               (addr_hit[ 4] & (|(AXI_VGA_PERMIT[ 4] & ~reg_be))) |
+               (addr_hit[ 5] & (|(AXI_VGA_PERMIT[ 5] & ~reg_be))) |
+               (addr_hit[ 6] & (|(AXI_VGA_PERMIT[ 6] & ~reg_be))) |
+               (addr_hit[ 7] & (|(AXI_VGA_PERMIT[ 7] & ~reg_be))) |
+               (addr_hit[ 8] & (|(AXI_VGA_PERMIT[ 8] & ~reg_be))) |
+               (addr_hit[ 9] & (|(AXI_VGA_PERMIT[ 9] & ~reg_be))) |
+               (addr_hit[10] & (|(AXI_VGA_PERMIT[10] & ~reg_be))) |
+               (addr_hit[11] & (|(AXI_VGA_PERMIT[11] & ~reg_be))) |
+               (addr_hit[12] & (|(AXI_VGA_PERMIT[12] & ~reg_be))) |
+               (addr_hit[13] & (|(AXI_VGA_PERMIT[13] & ~reg_be)))));
   end
 
   assign control_enable_we = addr_hit[0] & reg_we & !reg_error;
@@ -720,7 +720,7 @@ module axi_vga_register_file_reg_top #(
 
 endmodule
 
-module axi_vga_register_file_reg_top_intf
+module axi_vga_reg_top_intf
 #(
   parameter int AW = 6,
   localparam int DW = 32
@@ -729,7 +729,7 @@ module axi_vga_register_file_reg_top_intf
   input logic rst_ni,
   REG_BUS.in  regbus_slave,
   // To HW
-  output axi_vga_register_file_reg_pkg::axi_vga_register_file_reg2hw_t reg2hw, // Write
+  output axi_vga_reg_pkg::axi_vga_reg2hw_t reg2hw, // Write
   // Config
   input devmode_i // If 1, explicit error return for unmapped register access
 );
@@ -753,7 +753,7 @@ module axi_vga_register_file_reg_top_intf
 
   
 
-  axi_vga_register_file_reg_top #(
+  axi_vga_reg_top #(
     .reg_req_t(reg_bus_req_t),
     .reg_rsp_t(reg_bus_rsp_t),
     .AW(AW)

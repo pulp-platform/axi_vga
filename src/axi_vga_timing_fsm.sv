@@ -18,14 +18,14 @@ module axi_vga_timing_fsm #(
   input logic                     rst_ni,
 
   input logic                     fsm_en_i,
-  input axi_vga_register_file_reg_pkg::axi_vga_register_file_reg2hw_t reg2hw_i,
+  input axi_vga_reg_pkg::axi_vga_reg2hw_t reg2hw_i,
 
   // Data input
   input logic  [RedWidth-1:0]     red_i,
   input logic  [GreenWidth-1:0]   green_i,
   input logic  [BlueWidth-1:0]    blue_i,
   input logic                     valid_i,
-  output logic                    ready_o, 
+  output logic                    ready_o,
 
   // VGA output
   output logic                    hsync_o,
@@ -53,12 +53,12 @@ module axi_vga_timing_fsm #(
   assign green_o  = (visible & valid_i) ? green_i : 'b0;
   assign blue_o   = (visible & valid_i) ? blue_i :'b0;
   assign hsync_o  = reg2hw_i.control.hsync_pol.q ? hstate_q == SYNC : ~(hstate_q == SYNC);
-  assign vsync_o  = reg2hw_i.control.vsync_pol.q ? vstate_q == SYNC : ~(vstate_q == SYNC); 
+  assign vsync_o  = reg2hw_i.control.vsync_pol.q ? vstate_q == SYNC : ~(vstate_q == SYNC);
 
-  assign visible = (hstate_q == VISIBLE) & (vstate_q == VISIBLE);    
+  assign visible = (hstate_q == VISIBLE) & (vstate_q == VISIBLE);
 
   assign ready_o = visible & fsm_en;
-    
+
   // Enable FSM only if external enable is high (fsm_en_i) and enable register
   // is set too (reg2hw_i.control.q)
   assign fsm_en = reg2hw_i.control.enable.q & fsm_en_i;
@@ -78,7 +78,7 @@ module axi_vga_timing_fsm #(
     hcounter_d  = hcounter_q;
     hstate_d    = hstate_q;
 
-        
+
     if (fsm_en) begin
       hcounter_d  = hcounter_q - 1;
 
