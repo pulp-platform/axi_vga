@@ -108,7 +108,6 @@ module axi_vga_fetcher #(
     axi_req.ar.burst  = 2'b01;    // Increasing burst
     axi_req.ar.cache  = 4'b0010;
     axi_req.ar.id     = '0;       // Explicitely state that we're using ID 0
-    axi_req.ar.prot   = 3'b010;
     axi_req.ar.size   = AXIStrbWidthClog2[2:0];
     axi_req.ar_valid  = 1'b0;
 
