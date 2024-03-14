@@ -31,7 +31,7 @@ jobs:
 
   check-verilog:
     name: Check Verilog sources
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-22.04
     env:
       VERIBLE_VERSION: 0.0-807-g10e7c71
     steps:
