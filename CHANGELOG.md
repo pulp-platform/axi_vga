@@ -6,8 +6,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
-## 0.1.2 - 2024-03-14
+## 0.1.3 - 2024-03-14
+### Changed
+- Fix Ax PROT to issue secure requests.
 
+## 0.1.2 - 2024-03-14
 ### Changed
 - Update dependencies
     - bump AXI from `0.38.0` to `0.39.2`
