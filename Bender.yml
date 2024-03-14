@@ -12,9 +12,9 @@ package:
     - "Christopher Reinwardt <creinwar@student.ethz.ch>"
 
 dependencies:
-  axi: { git: "https://github.com/pulp-platform/axi", version: 0.38.0 }
-  common_cells: { git: "https://github.com/pulp-platform/common_cells", version: 1.28.0 }
-  register_interface : { git: "https://github.com/pulp-platform/register_interface", version: 0.3.8 }
+  axi: { git: "https://github.com/pulp-platform/axi", version: 0.39.2 }
+  common_cells: { git: "https://github.com/pulp-platform/common_cells", version: 1.33.0 }
+  register_interface : { git: "https://github.com/pulp-platform/register_interface", version: 0.4.2 }
 
 sources:
   - src/axi_vga_reg_pkg.sv
