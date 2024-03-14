@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
+## 0.1.2 - 2024-03-14
+
+### Changed
+- Update dependencies
+    - bump AXI from `0.38.0` to `0.39.2`
+    - bump Common Cells from `1.28.0` to `1.33.0`
+    - bump Register Interface from `0.3.8` to `0.4.2`
+
+### Fixed
+- Buffer reads in a credit-counter-controlled FIFO to prevent memory trashing.
+
 ## 0.1.1 - 2023-01-30
 ### Fixed
 - Fix typo in GNU Make fragment root variable
