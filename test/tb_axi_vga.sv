@@ -20,6 +20,12 @@ module tb_axi_vga;
   localparam int unsigned AXIIdWidth    =  2;
   localparam int unsigned AXIUserWidth  =  1;
 
+  // Buffer
+  localparam int unsigned BufferDepth = 16;
+  localparam int unsigned MaxReadTxns = 24;
+  // Mem Depth
+  localparam int unsigned MemDepth = 32;
+
   // RegBus parameters
   localparam int unsigned RegBusAddrWidth = 48;
   localparam int unsigned RegBusDataWidth = 32;
@@ -38,8 +44,8 @@ module tb_axi_vga;
   // AXI interface
   `AXI_TYPEDEF_ALL(axi_vga_tb, logic [AXIAddrWidth-1:0], logic [AXIIdWidth-1:0], logic [AXIDataWidth-1:0], logic [AXIStrbWidth-1:0], logic [AXIUserWidth-1:0])
   
-  axi_vga_tb_req_t  vga_axi_req;
-  axi_vga_tb_resp_t vga_axi_resp;
+  axi_vga_tb_req_t  vga_axi_req, vga_axi_req_dly;
+  axi_vga_tb_resp_t vga_axi_resp, vga_axi_resp_dly;
 
   // RegBus interface
   `REG_BUS_TYPEDEF_ALL(reg_vga_tb, logic [RegBusAddrWidth-1:0], logic [RegBusDataWidth-1:0], logic [RegBusStrbWidth-1:0])
@@ -159,13 +165,13 @@ module tb_axi_vga;
     .AcqDelay           ( 4ns               )
   ) i_axi_sim_mem (
     /// Rising-edge clock
-    .clk_i              ( clk           ),
+    .clk_i              ( clk              ),
     /// Active-low reset
-    .rst_ni             ( rst_n         ),
+    .rst_ni             ( rst_n            ),
     /// AXI4 request struct
-    .axi_req_i          ( vga_axi_req   ),
+    .axi_req_i          ( vga_axi_req_dly  ),
     /// AXI4 response struct
-    .axi_rsp_o          ( vga_axi_resp  ),
+    .axi_rsp_o          ( vga_axi_resp_dly ),
     /// Memory monitor write valid.  All `mon_w_*` outputs are only valid if this signal is high.
     /// A write to the memory is visible on the `mon_w_*` outputs in the clock cycle after it has
     /// happened.
@@ -204,19 +210,43 @@ module tb_axi_vga;
       $readmemh("../test/count.mem", i_axi_sim_mem.mem);
   end
 
+  axi_multicut #(
+    .NoCuts     ( MemDepth             ),
+    .aw_chan_t  ( axi_vga_tb_aw_chan_t ),
+    .w_chan_t   ( axi_vga_tb_w_chan_t  ),
+    .b_chan_t   ( axi_vga_tb_b_chan_t  ),
+    .ar_chan_t  ( axi_vga_tb_ar_chan_t ),
+    .r_chan_t   ( axi_vga_tb_r_chan_t  ),
+    .axi_req_t  ( axi_vga_tb_req_t     ),
+    .axi_resp_t ( axi_vga_tb_resp_t    )
+  ) i_axi_multicut (
+    .clk_i      ( clk              ),
+    .rst_ni     ( rst_n            ),
+    .slv_req_i  ( vga_axi_req      ),
+    .slv_resp_o ( vga_axi_resp     ),
+    .mst_req_o  ( vga_axi_req_dly  ),
+    .mst_resp_i ( vga_axi_resp_dly )
+  );
+
+
   axi_vga #(
-    .RedWidth       ( 5                 ),
-    .GreenWidth     ( 6                 ),
-    .BlueWidth      ( 5                 ),
-    .HCountWidth    ( 12                ),
-    .VCountWidth    ( 12                ),
-    .AXIAddrWidth   ( AXIAddrWidth      ),
-    .AXIDataWidth   ( AXIDataWidth      ),
-    .AXIStrbWidth   ( AXIStrbWidth      ),
-    .axi_req_t      ( axi_vga_tb_req_t  ),
-    .axi_resp_t     ( axi_vga_tb_resp_t ),
-    .reg_req_t      ( reg_vga_tb_req_t  ),
-    .reg_resp_t     ( reg_vga_tb_rsp_t  )
+    .RedWidth       ( 5                   ),
+    .GreenWidth     ( 6                   ),
+    .BlueWidth      ( 5                   ),
+    .HCountWidth    ( 12                  ),
+    .VCountWidth    ( 12                  ),
+    .AXIAddrWidth   ( AXIAddrWidth        ),
+    .AXIDataWidth   ( AXIDataWidth        ),
+    .AXIStrbWidth   ( AXIStrbWidth        ),
+    .AXIIdWidth     ( AXIIdWidth          ),
+    .AXIUserWidth   ( AXIUserWidth        ),
+    .BufferDepth    ( BufferDepth         ),
+    .MaxReadTxns    ( MaxReadTxns         ),
+    .axi_req_t      ( axi_vga_tb_req_t    ),
+    .axi_resp_t     ( axi_vga_tb_resp_t   ),
+    .axi_r_chan_t   ( axi_vga_tb_r_chan_t ),
+    .reg_req_t      ( reg_vga_tb_req_t    ),
+    .reg_resp_t     ( reg_vga_tb_rsp_t    )
   ) i_axi_vga (
     .clk_i          ( clk           ),
     .rst_ni         ( rst_n         ),
