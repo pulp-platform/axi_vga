@@ -6,6 +6,7 @@
 // Christopher Reinwardt <creinwar@student.ethz.ch>
 // Thomas Benz <tbenz@iis.ee.ethz.ch>
 
+`include "common_cells/assertions.svh"
 `include "common_cells/registers.svh"
 
 /// Simple VGA IP capable of drawing frames from an external framebuffer.
@@ -242,16 +243,10 @@ module axi_vga #(
   /////////////////////
 
   // Ensure a pixel is always smaller than or equal to a word
-  assert property (@(posedge clk_i) AXIDataWidth >= (RedWidth + GreenWidth + BlueWidth)) else begin
-    $error("AXIDataWidth has to be larger than or equal to the pixel width");
-    $stop();
-  end
+  `ASSERT_INIT(AXI_fits_PixelWidth, (AXIDataWidth >= (RedWidth + GreenWidth + BlueWidth)))
 
   // Ensure the word width is a multiple of the pixel width
-  assert property (@(posedge clk_i)
-      (AXIDataWidth % (RedWidth + GreenWidth + BlueWidth)) == 0) else begin
-    $error("AXIDataWidth has to be a multiple of the pixel width");
-    $stop();
-  end
+  `ASSERT_INIT(AXI_is_multiple_of_PixelWidth,
+    (AXIDataWidth % (RedWidth + GreenWidth + BlueWidth)) == 0)
 
 endmodule
