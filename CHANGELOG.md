@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
+## 0.1.4 - 2024-09-19
+### Changed
+- Use assert macros from `common_cells`.
+
 ## 0.1.3 - 2024-03-14
 ### Changed
 - Fix Ax PROT to issue secure requests.
