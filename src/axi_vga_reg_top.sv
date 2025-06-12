@@ -115,6 +115,9 @@ module axi_vga_reg_top #(
   logic [7:0] burst_len_qs;
   logic [7:0] burst_len_wd;
   logic burst_len_we;
+  logic [7:0] burst_split_len_qs;
+  logic [7:0] burst_split_len_wd;
+  logic burst_split_len_we;
 
   // Register instances
   // R[control]: V(False)
@@ -548,9 +551,36 @@ module axi_vga_reg_top #(
   );
 
 
+  // R[burst_split_len]: V(False)
+
+  prim_subreg #(
+    .DW      (8),
+    .SWACCESS("RW"),
+    .RESVAL  (8'h0)
+  ) u_burst_split_len (
+    .clk_i   (clk_i    ),
+    .rst_ni  (rst_ni  ),
+
+    // from register interface
+    .we     (burst_split_len_we),
+    .wd     (burst_split_len_wd),
+
+    // from internal hardware
+    .de     (1'b0),
+    .d      ('0  ),
+
+    // to internal hardware
+    .qe     (),
+    .q      (reg2hw.burst_split_len.q ),
+
+    // to register interface (read)
+    .qs     (burst_split_len_qs)
+  );
 
 
-  logic [13:0] addr_hit;
+
+
+  logic [14:0] addr_hit;
   always_comb begin
     addr_hit = '0;
     addr_hit[ 0] = (reg_addr == AXI_VGA_CONTROL_OFFSET);
@@ -567,6 +597,7 @@ module axi_vga_reg_top #(
     addr_hit[11] = (reg_addr == AXI_VGA_START_ADDR_HIGH_OFFSET);
     addr_hit[12] = (reg_addr == AXI_VGA_FRAME_SIZE_OFFSET);
     addr_hit[13] = (reg_addr == AXI_VGA_BURST_LEN_OFFSET);
+    addr_hit[14] = (reg_addr == AXI_VGA_BURST_SPLIT_LEN_OFFSET);
   end
 
   assign addrmiss = (reg_re || reg_we) ? ~|addr_hit : 1'b0 ;
@@ -587,7 +618,8 @@ module axi_vga_reg_top #(
                (addr_hit[10] & (|(AXI_VGA_PERMIT[10] & ~reg_be))) |
                (addr_hit[11] & (|(AXI_VGA_PERMIT[11] & ~reg_be))) |
                (addr_hit[12] & (|(AXI_VGA_PERMIT[12] & ~reg_be))) |
-               (addr_hit[13] & (|(AXI_VGA_PERMIT[13] & ~reg_be)))));
+               (addr_hit[13] & (|(AXI_VGA_PERMIT[13] & ~reg_be))) |
+               (addr_hit[14] & (|(AXI_VGA_PERMIT[14] & ~reg_be)))));
   end
 
   assign control_enable_we = addr_hit[0] & reg_we & !reg_error;
@@ -637,6 +669,9 @@ module axi_vga_reg_top #(
 
   assign burst_len_we = addr_hit[13] & reg_we & !reg_error;
   assign burst_len_wd = reg_wdata[7:0];
+
+  assign burst_split_len_we = addr_hit[14] & reg_we & !reg_error;
+  assign burst_split_len_wd = reg_wdata[7:0];
 
   // Read data return
   always_comb begin
@@ -698,6 +733,10 @@ module axi_vga_reg_top #(
 
       addr_hit[13]: begin
         reg_rdata_next[7:0] = burst_len_qs;
+      end
+
+      addr_hit[14]: begin
+        reg_rdata_next[7:0] = burst_split_len_qs;
       end
 
       default: begin

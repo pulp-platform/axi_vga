@@ -25,6 +25,10 @@ module axi_vga #(
   parameter int unsigned MaxReadTxns  = 24,
   parameter type axi_req_t            = logic,
   parameter type axi_resp_t           = logic,
+  parameter type axi_aw_chan_t        = logic,
+  parameter type axi_w_chan_t         = logic,
+  parameter type axi_b_chan_t         = logic,
+  parameter type axi_ar_chan_t        = logic,
   parameter type axi_r_chan_t         = logic,
   parameter type reg_req_t            = logic,
   parameter type reg_resp_t           = logic
@@ -151,23 +155,32 @@ module axi_vga #(
     .ready_i        ( ready               )
   );
 
-  axi_burst_splitter #(
-      .MaxReadTxns  ( MaxReadTxns   ),
-      .MaxWriteTxns ( 32'd1         ), // technically 0, but not supported
-      .FullBW       ( 1'b1          ),
-      .AddrWidth    ( AXIAddrWidth  ),
-      .DataWidth    ( AXIDataWidth  ),
-      .IdWidth      ( AXIIdWidth    ),
-      .UserWidth    ( AXIUserWidth  ),
-      .axi_req_t    ( axi_req_t     ),
-      .axi_resp_t   ( axi_resp_t    )
-  ) i_axi_burst_splitter (
+  axi_burst_splitter_gran #(
+      .MaxReadTxns   ( MaxReadTxns   ),
+      .MaxWriteTxns  ( 32'd1         ), // technically 0, but not supported
+      .FullBW        ( 1'b1          ),
+      .CutPath       ( 1'b0          ),
+      .DisableChecks ( 1'b0          ),
+      .AddrWidth     ( AXIAddrWidth  ),
+      .DataWidth     ( AXIDataWidth  ),
+      .IdWidth       ( AXIIdWidth    ),
+      .UserWidth     ( AXIUserWidth  ),
+
+      .axi_req_t     ( axi_req_t     ),
+      .axi_resp_t    ( axi_resp_t    ),
+      .axi_aw_chan_t ( axi_aw_chan_t ),
+      .axi_w_chan_t  ( axi_w_chan_t  ),
+      .axi_b_chan_t  ( axi_b_chan_t  ),
+      .axi_ar_chan_t ( axi_ar_chan_t ),
+      .axi_r_chan_t  ( axi_r_chan_t  )
+  ) i_axi_burst_splitter_gran (
       .clk_i,
       .rst_ni,
-      .slv_req_i  ( axi_req        ),
-      .slv_resp_o ( axi_resp       ),
-      .mst_req_o  ( axi_req_split  ),
-      .mst_resp_i ( axi_resp_split )
+      .len_limit_i ( reg2hw.burst_split_len.q ),
+      .slv_req_i   ( axi_req        ),
+      .slv_resp_o  ( axi_resp       ),
+      .mst_req_o   ( axi_req_split  ),
+      .mst_resp_i  ( axi_resp_split )
   );
 
   // Add stream FIFO in the response path to buffer requested data

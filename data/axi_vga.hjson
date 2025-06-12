@@ -228,7 +228,7 @@
       ]
     }
     { name: "BURST_LEN",
-      desc: "Number of beats in a burst",
+      desc: "Total number of beats prefetched as burst",
       swaccess: "rw",
       hwaccess: "hro",
       fields: [
@@ -237,7 +237,22 @@
           resval: "0"
           name: "burst_len"
           desc: '''
-                Number of beats in a burst.
+                Number of beats in a prefetch burst.
+                '''
+        }
+      ]
+    }
+    { name: "BURST_SPLIT_LEN",
+      desc: "Maximum number of beats in each burst requested from AXI",
+      swaccess: "rw",
+      hwaccess: "hro",
+      fields: [
+        {
+          bits: "7:0"
+          resval: "0"
+          name: "burst_len"
+          desc: '''
+                Maximum number of beats in a AXI burst.
                 '''
         }
       ]

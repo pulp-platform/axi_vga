@@ -12,7 +12,7 @@ package:
     - "Christopher Reinwardt <creinwar@student.ethz.ch>"
 
 dependencies:
-  axi: { git: "https://github.com/pulp-platform/axi", version: 0.39.2 }
+  axi: { git: "https://github.com/pulp-platform/axi", rev: tbenz/fifo_dly }
   common_cells: { git: "https://github.com/pulp-platform/common_cells", version: 1.33.0 }
   register_interface : { git: "https://github.com/pulp-platform/register_interface", version: 0.4.2 }
 

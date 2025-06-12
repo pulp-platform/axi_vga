@@ -77,22 +77,27 @@ package axi_vga_reg_pkg;
     logic [7:0]  q;
   } axi_vga_reg2hw_burst_len_reg_t;
 
+  typedef struct packed {
+    logic [7:0]  q;
+  } axi_vga_reg2hw_burst_split_len_reg_t;
+
   // Register -> HW type
   typedef struct packed {
-    axi_vga_reg2hw_control_reg_t control; // [370:368]
-    axi_vga_reg2hw_clk_div_reg_t clk_div; // [367:360]
-    axi_vga_reg2hw_hori_visible_size_reg_t hori_visible_size; // [359:328]
-    axi_vga_reg2hw_hori_front_porch_size_reg_t hori_front_porch_size; // [327:296]
-    axi_vga_reg2hw_hori_sync_size_reg_t hori_sync_size; // [295:264]
-    axi_vga_reg2hw_hori_back_porch_size_reg_t hori_back_porch_size; // [263:232]
-    axi_vga_reg2hw_vert_visible_size_reg_t vert_visible_size; // [231:200]
-    axi_vga_reg2hw_vert_front_porch_size_reg_t vert_front_porch_size; // [199:168]
-    axi_vga_reg2hw_vert_sync_size_reg_t vert_sync_size; // [167:136]
-    axi_vga_reg2hw_vert_back_porch_size_reg_t vert_back_porch_size; // [135:104]
-    axi_vga_reg2hw_start_addr_low_reg_t start_addr_low; // [103:72]
-    axi_vga_reg2hw_start_addr_high_reg_t start_addr_high; // [71:40]
-    axi_vga_reg2hw_frame_size_reg_t frame_size; // [39:8]
-    axi_vga_reg2hw_burst_len_reg_t burst_len; // [7:0]
+    axi_vga_reg2hw_control_reg_t control; // [378:376]
+    axi_vga_reg2hw_clk_div_reg_t clk_div; // [375:368]
+    axi_vga_reg2hw_hori_visible_size_reg_t hori_visible_size; // [367:336]
+    axi_vga_reg2hw_hori_front_porch_size_reg_t hori_front_porch_size; // [335:304]
+    axi_vga_reg2hw_hori_sync_size_reg_t hori_sync_size; // [303:272]
+    axi_vga_reg2hw_hori_back_porch_size_reg_t hori_back_porch_size; // [271:240]
+    axi_vga_reg2hw_vert_visible_size_reg_t vert_visible_size; // [239:208]
+    axi_vga_reg2hw_vert_front_porch_size_reg_t vert_front_porch_size; // [207:176]
+    axi_vga_reg2hw_vert_sync_size_reg_t vert_sync_size; // [175:144]
+    axi_vga_reg2hw_vert_back_porch_size_reg_t vert_back_porch_size; // [143:112]
+    axi_vga_reg2hw_start_addr_low_reg_t start_addr_low; // [111:80]
+    axi_vga_reg2hw_start_addr_high_reg_t start_addr_high; // [79:48]
+    axi_vga_reg2hw_frame_size_reg_t frame_size; // [47:16]
+    axi_vga_reg2hw_burst_len_reg_t burst_len; // [15:8]
+    axi_vga_reg2hw_burst_split_len_reg_t burst_split_len; // [7:0]
   } axi_vga_reg2hw_t;
 
   // Register offsets
@@ -110,6 +115,7 @@ package axi_vga_reg_pkg;
   parameter logic [BlockAw-1:0] AXI_VGA_START_ADDR_HIGH_OFFSET = 6'h 2c;
   parameter logic [BlockAw-1:0] AXI_VGA_FRAME_SIZE_OFFSET = 6'h 30;
   parameter logic [BlockAw-1:0] AXI_VGA_BURST_LEN_OFFSET = 6'h 34;
+  parameter logic [BlockAw-1:0] AXI_VGA_BURST_SPLIT_LEN_OFFSET = 6'h 38;
 
   // Register index
   typedef enum int {
@@ -126,11 +132,12 @@ package axi_vga_reg_pkg;
     AXI_VGA_START_ADDR_LOW,
     AXI_VGA_START_ADDR_HIGH,
     AXI_VGA_FRAME_SIZE,
-    AXI_VGA_BURST_LEN
+    AXI_VGA_BURST_LEN,
+    AXI_VGA_BURST_SPLIT_LEN
   } axi_vga_id_e;
 
   // Register width information to check illegal writes
-  parameter logic [3:0] AXI_VGA_PERMIT [14] = '{
+  parameter logic [3:0] AXI_VGA_PERMIT [15] = '{
     4'b 0001, // index[ 0] AXI_VGA_CONTROL
     4'b 0001, // index[ 1] AXI_VGA_CLK_DIV
     4'b 1111, // index[ 2] AXI_VGA_HORI_VISIBLE_SIZE
@@ -144,7 +151,8 @@ package axi_vga_reg_pkg;
     4'b 1111, // index[10] AXI_VGA_START_ADDR_LOW
     4'b 1111, // index[11] AXI_VGA_START_ADDR_HIGH
     4'b 1111, // index[12] AXI_VGA_FRAME_SIZE
-    4'b 0001  // index[13] AXI_VGA_BURST_LEN
+    4'b 0001, // index[13] AXI_VGA_BURST_LEN
+    4'b 0001  // index[14] AXI_VGA_BURST_SPLIT_LEN
   };
 
 endpackage
