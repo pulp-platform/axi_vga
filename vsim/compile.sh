@@ -16,4 +16,8 @@ bender script vsim -t test -t rtl \
     > compile.tcl
 echo 'return 0' >> compile.tcl
 
+cd ../test
+python3 gen_bmp.py  --width 640 --height 480 increment.bmp
+cd ../vsim
+
 $VSIM -c -do 'exit -code [source compile.tcl]'

@@ -8,6 +8,7 @@
 
 `include "common_cells/assertions.svh"
 `include "common_cells/registers.svh"
+`include "axi/typedef.svh"
 
 /// Simple VGA IP capable of drawing frames from an external framebuffer.
 module axi_vga #(
@@ -25,11 +26,6 @@ module axi_vga #(
   parameter int unsigned MaxReadTxns  = 24,
   parameter type axi_req_t            = logic,
   parameter type axi_resp_t           = logic,
-  parameter type axi_aw_chan_t        = logic,
-  parameter type axi_w_chan_t         = logic,
-  parameter type axi_b_chan_t         = logic,
-  parameter type axi_ar_chan_t        = logic,
-  parameter type axi_r_chan_t         = logic,
   parameter type reg_req_t            = logic,
   parameter type reg_resp_t           = logic
 )(
@@ -54,10 +50,22 @@ module axi_vga #(
   output logic [BlueWidth-1:0]    blue_o
 );
 
+  typedef logic [AXIAddrWidth-1:0] axi_addr_t;
+  typedef logic [AXIDataWidth-1:0] axi_data_t;
+  typedef logic [AXIIdWidth-1:0]   axi_id_t;
+  typedef logic [AXIStrbWidth-1:0] axi_strb_t;
+  typedef logic [AXIUserWidth-1:0] axi_user_t;
+
+  `AXI_TYPEDEF_AW_CHAN_T(axi_aw_chan_t, axi_addr_t, axi_id_t, axi_user_t)
+  `AXI_TYPEDEF_W_CHAN_T(axi_w_chan_t, axi_data_t, axi_strb_t, axi_user_t)
+  `AXI_TYPEDEF_B_CHAN_T(axi_b_chan_t, axi_id_t, axi_user_t)
+  `AXI_TYPEDEF_AR_CHAN_T(axi_ar_chan_t, axi_addr_t, axi_id_t, axi_user_t)
+  `AXI_TYPEDEF_R_CHAN_T(axi_r_chan_t, axi_data_t, axi_id_t, axi_user_t)
+
   /// credit counter width
   localparam int unsigned CounterWidth = $clog2(BufferDepth + 32'd1);
   /// credit counter type
-  typedef logic[CounterWidth-1:0] counter_t;
+  typedef logic [CounterWidth-1:0] counter_t;
 
   logic [7:0] clk_div;
   logic [7:0] clk_cnt_d, clk_cnt_q;

@@ -25,4 +25,5 @@ sources:
 
   - target: test
     files:
+      - test/tb_axi_vga_pkg.sv
       - test/tb_axi_vga.sv

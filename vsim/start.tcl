@@ -32,5 +32,9 @@ add wave -position end  sim:/tb_axi_vga/i_axi_vga/i_axi_vga_timing_fsm/vstate_q
 add wave -position end  sim:/tb_axi_vga/i_axi_vga/i_axi_vga_fetcher/offset_q
 add wave -position end  sim:/tb_axi_vga/vga_axi_resp.r.last
 add wave -position end  sim:/tb_axi_vga/i_axi_vga/i_axi_vga_fetcher/frame_size_i
-add wave -position end  sim:/tb_axi_vga/i_axi_vga/blue_o
 add wave -position end  sim:/tb_axi_vga/i_axi_vga/i_axi_vga_fetcher/offset_q
+add wave -position end  sim:/tb_axi_vga/i_axi_vga/vsync_o
+add wave -position end  sim:/tb_axi_vga/i_axi_vga/hsync_o
+add wave -position end  sim:/tb_axi_vga/i_axi_vga/red_o
+add wave -position end  sim:/tb_axi_vga/i_axi_vga/blue_o
+add wave -position end  sim:/tb_axi_vga/i_axi_vga/green_o
