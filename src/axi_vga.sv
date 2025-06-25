@@ -106,6 +106,7 @@ module axi_vga #(
     // Config
     .devmode_i      ( '1                  )  // Explicit error for unmapped register access
   );
+  // TODO: reject burst split length larger than BufferDepth
 
   // FSM managing the VGA signals
   axi_vga_timing_fsm #(
@@ -235,8 +236,8 @@ module axi_vga #(
     .oup_ready_i ( axi_resp_i.ar_ready                     )
   );
 
-  // read is completed on valid and ready r.last being popped from FIFO
-  assign read_completed = axi_resp_split.r.last & axi_req_split.r_ready & axi_resp_split.r_valid;
+  // read is completed on valid and ready beat being popped from FIFO
+  assign read_completed = axi_req_split.r_ready & axi_resp_split.r_valid;
 
   // simple credit counter
   always_comb begin : proc_credit_counter
@@ -247,10 +248,10 @@ module axi_vga #(
     if (read_completed) begin
       counter_d = counter_d - 32'd1;
     end
-    // possible issue?
-    if (counter_d < BufferDepth) begin
+    // Does FIFO have enough space for requested beats?
+    if (counter_d + axi_req_o.ar.len + 1 < BufferDepth) begin
       credit_valid = 1'b1;
-      counter_d = credit_ready ? counter_d + 32'd1 : counter_d;
+      counter_d = credit_ready ? counter_q + axi_req_o.ar.len + 1 : counter_q;
     end
   end
 
