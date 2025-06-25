@@ -22,7 +22,7 @@ module axi_vga #(
   parameter int unsigned AXIIdWidth   = 2,
   parameter int unsigned AXIUserWidth = 1,
   parameter int unsigned AXIStrbWidth = 8,
-  parameter int unsigned BufferDepth  = 16,
+  parameter int unsigned BufferDepth  = 32,
   parameter int unsigned MaxReadTxns  = 24,
   parameter type axi_req_t            = logic,
   parameter type axi_resp_t           = logic,
@@ -41,6 +41,10 @@ module axi_vga #(
   // AXI Data ports
   output axi_req_t                axi_req_o,
   input  axi_resp_t               axi_resp_i,
+
+  // Interrupts
+  output logic frame_done_o,  // timing FSM signals end of visible area
+  output logic vsync_start_o, // timing FSM signals start of VSYNC pulse
 
   // VGA interface
   output logic                    hsync_o,
@@ -72,13 +76,17 @@ module axi_vga #(
 
   axi_vga_reg_pkg::axi_vga_reg2hw_t reg2hw;
 
-  axi_req_t  axi_req,  axi_req_split;
-  axi_resp_t axi_resp, axi_resp_split;
+  axi_req_t  axi_req,  axi_req_fetcher, axi_req_split;
+  axi_resp_t axi_resp, axi_resp_fetcher, axi_resp_split;
+  axi_r_chan_t resp_fifo_inp, resp_fifo_out;
+  logic axi_req_cc_ar_valid, axi_resp_cc_ar_ready; // credit counter stream_join signals
 
   logic     read_completed;
   logic     credit_valid;
   logic     credit_ready;
   counter_t counter_d, counter_q;
+  counter_t fifo_usage;
+  logic     first_fetcher_req;
 
   logic [RedWidth-1:0]   red;
   logic [GreenWidth-1:0] green;
@@ -129,6 +137,10 @@ module axi_vga #(
     .valid_i        ( valid               ),
     .ready_o        ( ready               ),
 
+    // Interrupts
+    .frame_done_o,
+    .vsync_start_o,
+
     // VGA interface
     .hsync_o,
     .vsync_o,
@@ -149,20 +161,63 @@ module axi_vga #(
   ) i_axi_vga_fetcher (
     .clk_i,
     .rst_ni,
-    .enable_i       ( reg2hw.control.enable.q),
+    .enable_i       ( reg2hw.control.enable.q ),
 
-    .axi_req_o      ( axi_req             ),
-    .axi_resp_i     ( axi_resp            ),
+    .axi_req_o      ( axi_req_fetcher     ),
+    .axi_resp_i     ( axi_resp_fetcher    ),
 
     .start_addr_i   ( {reg2hw.start_addr_high.q, reg2hw.start_addr_low.q}),
     .frame_size_i   ( reg2hw.frame_size.q ),
     .burst_len_i    ( reg2hw.burst_len.q  ),
+    .burst_split_len_i ( reg2hw.burst_split_len.q  ),
     .red_o          ( red                 ),
     .green_o        ( green               ),
     .blue_o         ( blue                ),
     .valid_o        ( valid               ),
-    .ready_i        ( ready               )
+    .ready_i        ( ready               ),
+    .frame_done_i   ( frame_done_o        ),
+    .vsync_start_i  ( vsync_start_o       )
   );
+
+  // Add stream FIFO in the response channel to buffer requested data
+  // all other channels are just passed through
+  // fetcher request pass through
+  assign axi_req_split.aw       = axi_req_fetcher.aw;
+  assign axi_req_split.aw_valid = axi_req_fetcher.aw_valid;
+  assign axi_req_split.w        = axi_req_fetcher.w;
+  assign axi_req_split.w_valid  = axi_req_fetcher.w_valid;
+  assign axi_req_split.b_ready  = axi_req_fetcher.b_ready;
+  assign axi_req_split.ar       = axi_req_fetcher.ar;
+  assign axi_req_split.ar_valid = axi_req_fetcher.ar_valid;
+  // splitter response pass through
+  assign axi_resp_fetcher.ar_ready = axi_resp_split.ar_ready;
+  assign axi_resp_fetcher.aw_ready = axi_resp_split.aw_ready;
+  assign axi_resp_fetcher.w_ready  = axi_resp_split.w_ready;
+  assign axi_resp_fetcher.b_valid  = axi_resp_split.b_valid;
+  assign axi_resp_fetcher.b        = axi_resp_split.b;
+
+  stream_fifo #(
+    .FALL_THROUGH ( 32'd0               ),
+    .DEPTH        ( BufferDepth + 32'd1 ), // +1 as the FIFO cannot be pushed and popped in-cycle
+    .T            ( axi_r_chan_t        )
+  ) i_stream_fifo (
+    .clk_i,
+    .rst_ni,
+    .flush_i    ( frame_done_o   ),
+    .testmode_i ( test_mode_en_i ),
+    .usage_o    ( fifo_usage     ),
+    // from splitter
+    .data_i     ( axi_resp_split.r       ),
+    .valid_i    ( axi_resp_split.r_valid ),
+    .ready_o    ( axi_req_split.r_ready  ),
+    // to fetcher
+    .data_o     ( axi_resp_fetcher.r       ),
+    .valid_o    ( axi_resp_fetcher.r_valid ),
+    .ready_i    ( axi_req_fetcher.r_ready  )
+  );
+
+  // read is completed on valid and ready beat being popped from FIFO
+  assign read_completed = axi_req_fetcher.r_ready & axi_resp_fetcher.r_valid;
 
   axi_burst_splitter_gran #(
       .MaxReadTxns   ( MaxReadTxns   ),
@@ -186,72 +241,48 @@ module axi_vga #(
       .clk_i,
       .rst_ni,
       .len_limit_i ( reg2hw.burst_split_len.q ),
-      .slv_req_i   ( axi_req        ),
-      .slv_resp_o  ( axi_resp       ),
-      .mst_req_o   ( axi_req_split  ),
-      .mst_resp_i  ( axi_resp_split )
-  );
-
-  // Add stream FIFO in the response path to buffer requested data
-  // rest of the response is just passed through
-  // modulate number of outstanding AR's
-  // request pass through
-  assign axi_req_o.aw       = axi_req_split.aw;
-  assign axi_req_o.aw_valid = axi_req_split.aw_valid;
-  assign axi_req_o.w        = axi_req_split.w;
-  assign axi_req_o.w_valid  = axi_req_split.w_valid;
-  assign axi_req_o.b_ready  = axi_req_split.b_ready;
-  assign axi_req_o.ar       = axi_req_split.ar;
-  // response pass through
-  assign axi_resp_split.aw_ready = axi_resp_i.aw_ready;
-  assign axi_resp_split.w_ready  = axi_resp_i.w_ready;
-  assign axi_resp_split.b_valid  = axi_resp_i.b_valid;
-  assign axi_resp_split.b        = axi_resp_i.b;
-
-  stream_fifo #(
-    .FALL_THROUGH ( 32'd0               ),
-    .DEPTH        ( BufferDepth + 32'd1 ), // +1 as the FIFO cannot be pushed and popped in-cycle
-    .T            ( axi_r_chan_t        )
-  ) i_stream_fifo (
-    .clk_i,
-    .rst_ni,
-    .flush_i    ( 1'b0                   ),
-    .testmode_i ( test_mode_en_i         ),
-    .usage_o    ( /*NC*/                 ),
-    .data_i     ( axi_resp_i.r           ),
-    .valid_i    ( axi_resp_i.r_valid     ),
-    .ready_o    ( axi_req_o.r_ready      ),
-    .data_o     ( axi_resp_split.r       ),
-    .valid_o    ( axi_resp_split.r_valid ),
-    .ready_i    ( axi_req_split.r_ready  )
+      .slv_req_i   ( axi_req_split  ),
+      .slv_resp_o  ( axi_resp_split ),
+      .mst_req_o   ( axi_req        ),
+      .mst_resp_i  ( axi_resp       )
   );
 
   // combine the read handshaking and the credit counter
   stream_join #(
     .N_INP ( 32'd2 )
   ) i_stream_join (
-    .inp_valid_i ( {credit_valid, axi_req_split.ar_valid } ),
-    .inp_ready_o ( {credit_ready, axi_resp_split.ar_ready} ),
-    .oup_valid_o ( axi_req_o.ar_valid                      ),
-    .oup_ready_i ( axi_resp_i.ar_ready                     )
+    .inp_valid_i ( {credit_valid, axi_req.ar_valid}     ), // free credits and valid request from splitter
+    .inp_ready_o ( {credit_ready, axi_resp_cc_ar_ready} ),
+    .oup_valid_o ( axi_req_cc_ar_valid                  ), // then outgoing request is valid
+    .oup_ready_i ( axi_resp_i.ar_ready                  )  // distribute incoming ready to splitter and counter
   );
 
-  // read is completed on valid and ready beat being popped from FIFO
-  assign read_completed = axi_req_split.r_ready & axi_resp_split.r_valid;
+  always_comb begin
+    axi_req_o = axi_req;
+    axi_req_o.ar_valid = axi_req_cc_ar_valid;
+    axi_resp = axi_resp_i;
+    axi_resp.ar_ready = axi_resp_cc_ar_ready;
+  end
 
-  // simple credit counter
+
+  // tracks beats from splitter requests to response fifo being popped by fetcher
   always_comb begin : proc_credit_counter
     // default
     counter_d    = counter_q;
     credit_valid = 1'b0;
-    // completed
+
+    // flush all in-flight data at the end of a frame (stale)
+    if (frame_done_o) begin
+      counter_d = counter_d - fifo_usage;
+    end
+
     if (read_completed) begin
       counter_d = counter_d - 32'd1;
     end
-    // Does FIFO have enough space for requested beats?
-    if (counter_d + axi_req_o.ar.len + 1 < BufferDepth) begin
+    // does FIFO have enough space for requested number of beats?
+    if (counter_d + (axi_req_o.ar.len + 1) <= BufferDepth) begin
       credit_valid = 1'b1;
-      counter_d = credit_ready ? counter_q + axi_req_o.ar.len + 1 : counter_q;
+      counter_d = credit_ready ? counter_d + (axi_req_o.ar.len + 1) : counter_d;
     end
   end
 

@@ -21,11 +21,15 @@ module axi_vga_timing_fsm #(
   input axi_vga_reg_pkg::axi_vga_reg2hw_t reg2hw_i,
 
   // Data input
-  input logic  [RedWidth-1:0]     red_i,
-  input logic  [GreenWidth-1:0]   green_i,
-  input logic  [BlueWidth-1:0]    blue_i,
-  input logic                     valid_i,
+  input  logic [RedWidth-1:0]     red_i,
+  input  logic [GreenWidth-1:0]   green_i,
+  input  logic [BlueWidth-1:0]    blue_i,
+  input  logic                    valid_i,
   output logic                    ready_o,
+
+  // Interrupts
+  output logic frame_done_o,
+  output logic vsync_start_o,
 
   // VGA output
   output logic                    hsync_o,
@@ -73,6 +77,11 @@ module axi_vga_timing_fsm #(
   assign v_sync_size    = reg2hw_i.vert_sync_size.q;
   assign v_back_size    = reg2hw_i.vert_back_porch_size.q;
 
+  assign frame_done_o   = (vstate_q == FRONT_PORCH) & (vcounter_q == v_front_size)
+                          & (hstate_q == FRONT_PORCH) & (hcounter_q == h_front_size) & fsm_en;
+  assign vsync_start_o =  (vstate_q == SYNC) & (vcounter_q == v_sync_size) 
+                          & (hstate_q == VISIBLE) & (hcounter_q == h_visible_size) & fsm_en;
+
   // Horizontal FSM
   always_comb begin
     hcounter_d  = hcounter_q;
@@ -116,8 +125,9 @@ module axi_vga_timing_fsm #(
         end
       endcase
     end else if (!reg2hw_i.control.enable.q) begin
-      hcounter_d = 1;
-      hstate_d   = BACK_PORCH;
+      // Reset to beginning of FRONT_PAGE (right after visible)
+      hcounter_d = h_sync_size;
+      hstate_d   = FRONT_PORCH;
     end
   end
 
@@ -163,8 +173,9 @@ module axi_vga_timing_fsm #(
         end
       endcase
     end else if (!reg2hw_i.control.enable.q) begin
-      vcounter_d = 1;
-      vstate_d   = BACK_PORCH;
+      // Reset to beginning of FRONT_PAGE (right after visible)
+      vcounter_d = v_front_size;
+      vstate_d   = FRONT_PORCH;
     end
   end
 
@@ -173,8 +184,8 @@ module axi_vga_timing_fsm #(
     if(!rst_ni) begin
       hcounter_q  <= 'd1;
       vcounter_q  <= 'd1;
-      hstate_q    <= BACK_PORCH;
-      vstate_q    <= BACK_PORCH;
+      hstate_q    <= FRONT_PORCH;
+      vstate_q    <= FRONT_PORCH;
     end else begin
       hcounter_q  <= hcounter_d;
       vcounter_q  <= vcounter_d;

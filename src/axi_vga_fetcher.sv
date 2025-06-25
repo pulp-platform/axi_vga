@@ -29,12 +29,15 @@ module axi_vga_fetcher #(
   // VGA interface
   input  logic [63:0]             start_addr_i,
   input  logic [31:0]             frame_size_i,
-  input  logic [7:0]              burst_len_i,
+  input  logic [7:0]              burst_len_i, // size of prefetch bursts
+  input  logic [7:0]              burst_split_len_i, // size of outgoing bursts
   output logic [RedWidth-1:0]     red_o,
   output logic [GreenWidth-1:0]   green_o,
   output logic [BlueWidth-1:0]    blue_o,
   output logic                    valid_o,
-  input  logic                    ready_i
+  input  logic                    ready_i,
+  input  logic                    frame_done_i,
+  input  logic                    vsync_start_i
 );
 
   localparam int unsigned PixelWidth = RedWidth + GreenWidth + BlueWidth;
@@ -50,6 +53,7 @@ module axi_vga_fetcher #(
   axi_resp_t axi_resp;
 
   logic [AXIAddrWidth-1:0] addr_page_mask, start_addr;
+  logic [AXIAddrWidth-1:0] next_page_boundary, dist_to_page_boundary;
   logic [AXIAddrWidth-1:0] req_addr_q, req_addr_d;
   logic [AXIDataWidth-1:0] new_beat_data_q, new_beat_data_d;
   logic [AXIDataWidth-1:0] old_beat_data_q, old_beat_data_d;
@@ -57,15 +61,18 @@ module axi_vga_fetcher #(
   logic [AXIAddrWidth-1:0] frame_start_q, frame_start_d;
   logic [31:0] frame_size_q, frame_size_d, remaining_len;
   logic [7:0]  burst_len_q, burst_len_d, last_len_d, last_len_q;
+  logic [AXIStrbWidthClog2+8:0] max_burst_bytes;
 
   logic resp_last_q;
 
   logic first_req_q, first_req_d;
   logic init_done_q, init_done_d;
   logic process_started_q, process_started_d, process_started_last;
+  logic frame_pause_q, frame_pause_d;   // marks time between frame_done and requesting next frame
+  logic vsync_seen_q, vsync_seen_d;     // goes high with vsync_start_i, reset by sending first request
   logic valid_q, valid_d;
 
-  assign valid_o = valid_q;
+  assign valid_o = valid_q & ~frame_pause_q; // during frame_pause only stale data arrives -> trash
 
   assign axi_req_o = axi_req;
   assign axi_resp = axi_resp_i;
@@ -83,10 +90,15 @@ module axi_vga_fetcher #(
 
   // Create an AXIAddrWidth wide mask to ignore the lower 12 bit
   localparam int PageRemainingBits = AXIAddrWidth - 12;
-  assign addr_page_mask = {{PageRemainingBits{1'b1}}, 12'h0};
+  assign addr_page_mask        = {{PageRemainingBits{1'b1}}, 12'h0};
+  assign next_page_boundary    = ((req_addr_q + 4096) & addr_page_mask);
+  assign dist_to_page_boundary = next_page_boundary - req_addr_q;
 
   // How many bytes of a frame are left
   assign remaining_len  = frame_size_q-(req_addr_q-frame_start_q);
+
+  // Number of bytes in a max-size burst
+  assign max_burst_bytes = (burst_len_q + 1) * AXIStrbWidth;
 
   assign blue_o   = old_beat_data_q[offset_q[AXIStrbWidthClog2+3-1:0] +:BlueWidth];
   assign green_o  = old_beat_data_q[offset_q[AXIStrbWidthClog2+3-1:0] + BlueWidth +:GreenWidth];
@@ -95,6 +107,8 @@ module axi_vga_fetcher #(
 
   // FSM to send requests
   always_comb begin
+    logic [7:0]  req_burst_len; // intermediate signal to calculate actual requested burst size
+
     frame_start_d     = frame_start_q;
     frame_size_d      = frame_size_q;
     burst_len_d       = burst_len_q;
@@ -111,36 +125,32 @@ module axi_vga_fetcher #(
     axi_req.ar.size   = AXIStrbWidthClog2[2:0];
     axi_req.ar_valid  = 1'b0;
 
+    req_burst_len = burst_len_q; // use max-size burst whenever possible
+    axi_req.ar.len = req_burst_len;
+
     unique case (req_state_q)
 
       REQ: begin
-        if(enable_i) begin
+        if (enable_i && !frame_pause_q) begin
           axi_req.ar_valid = 1'b1;
 
-          if(remaining_len > (burst_len_q+1)*AXIStrbWidth) begin
-            if(req_addr_q[AXIAddrWidth-1:12] ==
-                ((req_addr_q + (burst_len_q+1)*AXIStrbWidth) >> 12)) begin
-              // Not the last request of frame
-              axi_req.ar.len = burst_len_q;
-              last_len_d     = burst_len_q;
-            end else begin
-              axi_req.ar.len =
-                ((((req_addr_q + 4096) & addr_page_mask) - req_addr_q) >> AXIStrbWidthClog2)-1;
-              last_len_d     =
-                ((((req_addr_q + 4096) & addr_page_mask) - req_addr_q) >> AXIStrbWidthClog2)-1;
-            end
-          end else begin
-            if(req_addr_q[AXIAddrWidth-1:12] == ((req_addr_q + remaining_len) >> 12)) begin
-              // Last part of frame is within 4k boundary
-              axi_req.ar.len = (remaining_len >> AXIStrbWidthClog2)-1;
-              last_len_d     = (remaining_len >> AXIStrbWidthClog2)-1;
-            end else begin
-              axi_req.ar.len =
-                ((((req_addr_q + 4096) & addr_page_mask) - req_addr_q) >> AXIStrbWidthClog2)-1;
-              last_len_d     =
-                ((((req_addr_q + 4096) & addr_page_mask) - req_addr_q) >> AXIStrbWidthClog2)-1;
-            end
+          // if (max_burst_bytes > (dist_to_page_boundary - 4*burst_split_len_i) ) begin
+          //   // max burst would land us close to page boundary, back-off a bit to avoid small burst
+          //   req_burst_len = ( (dist_to_page_boundary - 4*burst_split_len_i) >> AXIStrbWidthClog2 )-1;
+          // end
+
+          if (remaining_len < max_burst_bytes) begin
+            // burst would exceed frame, reduce its length
+            req_burst_len = (remaining_len >> AXIStrbWidthClog2)-1;
           end
+
+          if (req_addr_q[AXIAddrWidth-1:12] !=
+                ((req_addr_q + (req_burst_len+1)*AXIStrbWidth) >> 12)) begin
+            // burst would cross a page boundary -> split it at boundary
+            axi_req.ar.len = (dist_to_page_boundary >> AXIStrbWidthClog2)-1;
+          end
+
+          last_len_d = axi_req.ar.len;
 
           if(axi_resp.ar_ready) begin
             req_state_d = R_IDLE;
@@ -160,18 +170,27 @@ module axi_vga_fetcher #(
       R_IDLE: begin
         axi_req.ar_valid = 1'b0;
 
-        if(enable_i) begin
-          if((axi_resp.r_valid & axi_resp.r.last & !resp_last_q) | first_req_q) begin
+        if(enable_i && !frame_pause_q) begin
+          if((axi_resp.r_valid & axi_resp.r.last & !resp_last_q) | first_req_q | vsync_seen_q) begin
             req_state_d = REQ;
             first_req_d = 1'b0;
+            req_addr_d = req_addr_q + ((last_len_q+1)*AXIStrbWidth);
+
             if((req_addr_q >= frame_start_q+frame_size_q-((last_len_q+1)*AXIStrbWidth))) begin
-              // Was last REQ
-              frame_start_d = start_addr;
-              frame_size_d = frame_size_i;
-              burst_len_d = burst_len_i;
-              req_addr_d = start_addr;
-            end else begin
-              req_addr_d = req_addr_q + ((last_len_q+1)*AXIStrbWidth);
+              // Was last REQ of frame
+              req_addr_d = req_addr_q;
+
+              if (vsync_seen_q) begin
+                // vsync occured -> request next frame
+                frame_start_d = start_addr;
+                frame_size_d  = frame_size_i;
+                burst_len_d   = burst_len_i;
+                req_addr_d    = start_addr;
+                first_req_d   = 1'b1;
+              end else begin
+                // waiting for vsync
+                req_state_d = R_IDLE;
+              end
             end
           end
         end else begin
@@ -183,6 +202,33 @@ module axi_vga_fetcher #(
         req_state_d = REQ;
       end
     endcase
+  end
+
+
+  always_comb begin : proc_frame_pause
+    frame_pause_d       = frame_pause_q;
+    vsync_seen_d        = vsync_seen_q;
+
+    if (!enable_i) begin
+      frame_pause_d       = 1'b1;
+      vsync_seen_d        = 1'b0;
+    end else begin
+      if (frame_done_i) begin
+        // Enter frame pause
+        frame_pause_d       = 1'b1;
+        vsync_seen_d        = 1'b0;
+      end
+      // latch vsync_start, reset by ending frame_pause
+      if (vsync_start_i) begin
+        vsync_seen_d = 1'b1;
+      end
+
+      // resume only when both conditions are satisfied (after vsync and no outstanding request)
+      if (frame_pause_q && (req_state_q == REQ) && vsync_seen_q) begin
+        frame_pause_d      = 1'b0;
+        vsync_seen_d       = 1'b0;
+      end
+    end
   end
 
   // FSM to accept beats
@@ -201,13 +247,15 @@ module axi_vga_fetcher #(
           end else accept_state_d = A_IDLE;
         end
         if(!enable_i) begin
+          axi_req.r_ready = 1'b0;
           accept_state_d = ACCEPT;
         end
       end
 
       A_IDLE: begin
         axi_req.r_ready = 1'b0;
-        if((process_started_q & !process_started_last) | !enable_i) begin
+        if((process_started_q & !process_started_last) | 
+          !enable_i | (frame_pause_q && !frame_pause_d)) begin
           accept_state_d = ACCEPT;
         end
       end
@@ -225,7 +273,7 @@ module axi_vga_fetcher #(
     old_beat_data_d   = old_beat_data_q;
     process_started_d = process_started_q;
 
-    if(!enable_i) begin
+    if(!enable_i || (frame_pause_q && !frame_pause_d)) begin
       valid_d = 1'b0;
       init_done_d = 1'b0;
     end else begin
@@ -243,7 +291,8 @@ module axi_vga_fetcher #(
       if(init_done_q) begin
         process_started_d = 1'b0;
 
-        if(ready_i) begin
+        // if timing fsm needs data or we flush out old frame during frame_pause
+        if(ready_i || (frame_pause_q & axi_resp.r_valid)) begin
           if(offset_q[AXIStrbWidthClog2+3-1:0] == AXIDataWidth-PixelWidth) begin
             // was last pixel of beat
             old_beat_data_d   = new_beat_data_q;
@@ -263,8 +312,11 @@ module axi_vga_fetcher #(
   always_comb begin
     offset_d = offset_q;
 
-    if(enable_i) begin
-      if(ready_i) begin
+    if(!enable_i || (frame_pause_q && !frame_pause_d)) begin
+      offset_d = AXIDataWidth[15:0];
+    end else begin
+      // if timing fsm needs data or we flush out old frame during frame_pause
+      if(ready_i || (frame_pause_q & axi_resp.r_valid)) begin
         offset_d = offset_q + PixelWidth; // Default when we sent out a pixel
 
         // We send out a pixel and at the same time fetch the next beat
@@ -277,8 +329,6 @@ module axi_vga_fetcher #(
           ((accept_state_q == ACCEPT) & (axi_resp.r_valid) & (offset_q >= AXIDataWidth)) begin
         offset_d = offset_q - AXIDataWidth;
       end
-    end else begin
-      offset_d = AXIDataWidth[15:0];
     end
   end
 
@@ -289,6 +339,8 @@ module axi_vga_fetcher #(
       frame_size_q            <= '0;
       burst_len_q             <= '0;
       last_len_q              <= '0;
+      frame_pause_q           <= 1'b1;
+      vsync_seen_q            <= '0;
       first_req_q             <= 1'b1;
       req_state_q             <= REQ;
       req_addr_q              <= '0;
@@ -310,6 +362,8 @@ module axi_vga_fetcher #(
       burst_len_q             <= burst_len_d;
       last_len_q              <= last_len_d;
       first_req_q             <= first_req_d;
+      frame_pause_q           <= frame_pause_d;
+      vsync_seen_q            <= vsync_seen_d;
       req_state_q             <= req_state_d;
       req_addr_q              <= req_addr_d;
 
