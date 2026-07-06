@@ -186,15 +186,15 @@ module axi_vga #(
   assign axi_resp_split.b_valid  = axi_resp_i.b_valid;
   assign axi_resp_split.b        = axi_resp_i.b;
 
-  stream_fifo #(
-    .FALL_THROUGH ( 32'd0               ),
-    .DEPTH        ( BufferDepth + 32'd1 ), // +1 as the FIFO cannot be pushed and popped in-cycle
-    .T            ( axi_r_chan_t        )
+  cc_stream_fifo #(
+    .FallThrough ( 32'd0               ),
+    .Depth       ( BufferDepth + 32'd1 ), // +1 as the FIFO cannot be pushed and popped in-cycle
+    .data_t      ( axi_r_chan_t        )
   ) i_stream_fifo (
     .clk_i,
     .rst_ni,
+    .clr_i      ( 1'b0                   ),
     .flush_i    ( 1'b0                   ),
-    .testmode_i ( test_mode_en_i         ),
     .usage_o    ( /*NC*/                 ),
     .data_i     ( axi_resp_i.r           ),
     .valid_i    ( axi_resp_i.r_valid     ),
@@ -205,8 +205,8 @@ module axi_vga #(
   );
 
   // combine the read handshaking and the credit counter
-  stream_join #(
-    .N_INP ( 32'd2 )
+  cc_stream_join #(
+    .NumInp ( 32'd2 )
   ) i_stream_join (
     .inp_valid_i ( {credit_valid, axi_req_split.ar_valid } ),
     .inp_ready_o ( {credit_ready, axi_resp_split.ar_ready} ),
