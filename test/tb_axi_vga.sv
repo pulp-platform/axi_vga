@@ -33,6 +33,16 @@ module tb_axi_vga;
 	localparam int unsigned APBAddrWidth = 32;
 	localparam int unsigned APBDataWidth = 32;
 
+	typedef logic [APBAddrWidth-1:0]   apb_addr_t;
+	typedef logic [APBDataWidth-1:0]   apb_data_t;
+	typedef logic [APBDataWidth/8-1:0] apb_strb_t;
+
+	`APB_TYPEDEF_REQ_T(apb_req_t, apb_addr_t, apb_data_t, apb_strb_t)
+	`APB_TYPEDEF_RESP_T(apb_resp_t, apb_data_t)
+
+	apb_req_t  vga_apb_req;
+    apb_resp_t vga_apb_rsp;
+
 	logic clk, rst_n;
 
 	clk_rst_gen #(
@@ -64,6 +74,17 @@ module tb_axi_vga;
 
 	apb_driver_t tb_apb_driver = new(i_tb_apb);
 
+	assign vga_apb_req.paddr   = i_tb_apb.paddr;
+    assign vga_apb_req.pprot   = i_tb_apb.pprot;
+    assign vga_apb_req.psel    = i_tb_apb.psel;
+    assign vga_apb_req.penable = i_tb_apb.penable;
+    assign vga_apb_req.pwrite  = i_tb_apb.pwrite;
+    assign vga_apb_req.pwdata  = i_tb_apb.pwdata;
+    assign vga_apb_req.pstrb   = i_tb_apb.pstrb;
+
+    assign i_tb_apb.pready  = vga_apb_rsp.pready;
+    assign i_tb_apb.prdata  = vga_apb_rsp.prdata;
+    assign i_tb_apb.pslverr = vga_apb_rsp.pslverr;
 
 	typedef struct {
 		logic [APBAddrWidth-1:0] addr;
@@ -455,24 +476,20 @@ module tb_axi_vga;
 		.BufferDepth    ( BufferDepth         ),
 		.MaxReadTxns    ( MaxReadTxns         ),
 		.axi_req_t      ( axi_vga_tb_req_t    ),
-		.axi_resp_t     ( axi_vga_tb_resp_t   )
+		.axi_resp_t     ( axi_vga_tb_resp_t   ),
+		.axi_r_chan_t   ( axi_vga_tb_r_chan_t ),
+
+        .apb_req_t      ( apb_req_t           ),
+        .apb_resp_t     ( apb_resp_t          )
 	) i_axi_vga (
 		.clk_i          ( clk           ),
 		.rst_ni         ( rst_n         ),
 
 		.test_mode_en_i ( 1'b0          ),
 
-		// APB config ports
-		.paddr_i   ( i_tb_apb.paddr   ),
-		.pprot_i   ( i_tb_apb.pprot   ),
-		.psel_i    ( i_tb_apb.psel    ),
-		.penable_i ( i_tb_apb.penable ),
-		.pwrite_i  ( i_tb_apb.pwrite  ),
-		.pwdata_i  ( i_tb_apb.pwdata  ),
-		.pstrb_i   ( i_tb_apb.pstrb   ),
-		.pready_o  ( i_tb_apb.pready  ),
-		.prdata_o  ( i_tb_apb.prdata  ),
-		.pslverr_o ( i_tb_apb.pslverr ),
+        // APB config interface
+        .apb_req_i      ( vga_apb_req  ),
+        .apb_rsp_o      ( vga_apb_rsp  ),
 
 		// AXI Data ports
 		.axi_req_o      ( vga_axi_req   ),
