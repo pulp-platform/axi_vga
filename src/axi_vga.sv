@@ -25,7 +25,9 @@ module axi_vga #(
   parameter int unsigned MaxReadTxns  = 24,
   parameter type axi_req_t            = logic,
   parameter type axi_resp_t           = logic,
-  parameter type axi_r_chan_t         = logic
+  parameter type axi_r_chan_t         = logic,
+  parameter type apb_req_t            = logic,
+  parameter type apb_resp_t           = logic
 )(
   input logic                     clk_i,
   input logic                     rst_ni,
@@ -33,16 +35,8 @@ module axi_vga #(
   input logic                     test_mode_en_i,
 
   // APB configuration port
-  input  logic [31:0] paddr_i,
-  input  logic [2:0]  pprot_i,
-  input  logic        psel_i,
-  input  logic        penable_i,
-  input  logic        pwrite_i,
-  input  logic [31:0] pwdata_i,
-  input  logic [3:0]  pstrb_i,
-  output logic        pready_o,
-  output logic [31:0] prdata_o,
-  output logic        pslverr_o,
+  input  apb_req_t  apb_req_i,
+  output apb_resp_t apb_rsp_o,
 
   // AXI Data ports
   output axi_req_t                axi_req_o,
@@ -90,16 +84,17 @@ module axi_vga #(
     .clk            ( clk_i        ),
     .rst            ( ~rst_ni      ),
 
-    .s_apb_psel     ( psel_i       ),
-    .s_apb_penable  ( penable_i    ),
-    .s_apb_pwrite   ( pwrite_i     ),
-    .s_apb_pprot    ( pprot_i      ),
-    .s_apb_paddr    ( paddr_i[5:0] ),
-    .s_apb_pwdata   ( pwdata_i     ),
-    .s_apb_pstrb    ( pstrb_i      ),
-    .s_apb_pready   ( pready_o     ),
-    .s_apb_prdata   ( prdata_o     ),
-    .s_apb_pslverr  ( pslverr_o    ),
+    .s_apb_psel     ( apb_req_i.psel       ),
+    .s_apb_penable  ( apb_req_i.penable    ),
+    .s_apb_pwrite   ( apb_req_i.pwrite     ),
+    .s_apb_pprot    ( apb_req_i.pprot      ),
+    .s_apb_paddr    ( apb_req_i.paddr[5:0] ),
+    .s_apb_pwdata   ( apb_req_i.pwdata     ),
+    .s_apb_pstrb    ( apb_req_i.pstrb      ),
+
+    .s_apb_pready   ( apb_rsp_o.pready     ),
+    .s_apb_prdata   ( apb_rsp_o.prdata     ),
+    .s_apb_pslverr  ( apb_rsp_o.pslverr    ),
 	
     // To HW
     .hwif_out       ( reg2hw       )// Write
