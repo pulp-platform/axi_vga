@@ -104,7 +104,6 @@ module axi_vga_reg_top (
     } decoded_reg_strb_t;
     decoded_reg_strb_t decoded_reg_strb;
     logic decoded_err;
-    logic [5:0] decoded_addr;
     logic decoded_req;
     logic decoded_req_is_wr;
     logic [31:0] decoded_wr_data;
@@ -112,9 +111,9 @@ module axi_vga_reg_top (
 
     always_comb begin
         automatic logic is_valid_addr;
-        automatic logic is_valid_rw;
-        is_valid_addr = '1; // No valid address check
-        is_valid_rw = '1; // No valid RW check
+        automatic logic is_invalid_rw;
+        is_valid_addr = '1; // No error checking on valid address access
+        is_invalid_rw = '0;
         decoded_reg_strb.control = cpuif_req_masked & (cpuif_addr == 6'h0);
         decoded_reg_strb.clk_div = cpuif_req_masked & (cpuif_addr == 6'h4);
         decoded_reg_strb.hori_visible_size = cpuif_req_masked & (cpuif_addr == 6'h8);
@@ -130,11 +129,10 @@ module axi_vga_reg_top (
         decoded_reg_strb.frame_size = cpuif_req_masked & (cpuif_addr == 6'h30);
         decoded_reg_strb.burst_len = cpuif_req_masked & (cpuif_addr == 6'h34);
         decoded_reg_strb.burst_split_len = cpuif_req_masked & (cpuif_addr == 6'h38);
-        decoded_err = '0;
+        decoded_err = (~is_valid_addr | is_invalid_rw) & decoded_req;
     end
 
     // Pass down signals to next stage
-    assign decoded_addr = cpuif_addr;
     assign decoded_req = cpuif_req_masked;
     assign decoded_req_is_wr = cpuif_req_is_wr;
     assign decoded_wr_data = cpuif_wr_data;
@@ -733,65 +731,42 @@ module axi_vga_reg_top (
     // Readback
     //--------------------------------------------------------------------------
 
-    logic [5:0] rd_mux_addr;
-    assign rd_mux_addr = decoded_addr;
-
     logic readback_err;
     logic readback_done;
     logic [31:0] readback_data;
+
+    // Assign readback values to a flattened array
+    logic [31:0] readback_array[15];
+    assign readback_array[0][0:0] = (decoded_reg_strb.control && !decoded_req_is_wr) ? field_storage.control.enable.value : '0;
+    assign readback_array[0][1:1] = (decoded_reg_strb.control && !decoded_req_is_wr) ? field_storage.control.hsync_pol.value : '0;
+    assign readback_array[0][2:2] = (decoded_reg_strb.control && !decoded_req_is_wr) ? field_storage.control.vsync_pol.value : '0;
+    assign readback_array[0][31:3] = '0;
+    assign readback_array[1][7:0] = (decoded_reg_strb.clk_div && !decoded_req_is_wr) ? field_storage.clk_div.clk_div.value : '0;
+    assign readback_array[1][31:8] = '0;
+    assign readback_array[2][31:0] = (decoded_reg_strb.hori_visible_size && !decoded_req_is_wr) ? field_storage.hori_visible_size.hori_visible_size.value : '0;
+    assign readback_array[3][31:0] = (decoded_reg_strb.hori_front_porch_size && !decoded_req_is_wr) ? field_storage.hori_front_porch_size.hori_front_porch_size.value : '0;
+    assign readback_array[4][31:0] = (decoded_reg_strb.hori_sync_size && !decoded_req_is_wr) ? field_storage.hori_sync_size.hori_sync_size.value : '0;
+    assign readback_array[5][31:0] = (decoded_reg_strb.hori_back_porch_size && !decoded_req_is_wr) ? field_storage.hori_back_porch_size.hori_back_porch_size.value : '0;
+    assign readback_array[6][31:0] = (decoded_reg_strb.vert_visible_size && !decoded_req_is_wr) ? field_storage.vert_visible_size.vert_visible_size.value : '0;
+    assign readback_array[7][31:0] = (decoded_reg_strb.vert_front_porch_size && !decoded_req_is_wr) ? field_storage.vert_front_porch_size.vert_front_porch_size.value : '0;
+    assign readback_array[8][31:0] = (decoded_reg_strb.vert_sync_size && !decoded_req_is_wr) ? field_storage.vert_sync_size.vert_sync_size.value : '0;
+    assign readback_array[9][31:0] = (decoded_reg_strb.vert_back_porch_size && !decoded_req_is_wr) ? field_storage.vert_back_porch_size.vert_back_porch_size.value : '0;
+    assign readback_array[10][31:0] = (decoded_reg_strb.start_addr_low && !decoded_req_is_wr) ? field_storage.start_addr_low.start_addr_low.value : '0;
+    assign readback_array[11][31:0] = (decoded_reg_strb.start_addr_high && !decoded_req_is_wr) ? field_storage.start_addr_high.start_addr_high.value : '0;
+    assign readback_array[12][31:0] = (decoded_reg_strb.frame_size && !decoded_req_is_wr) ? field_storage.frame_size.frame_size.value : '0;
+    assign readback_array[13][7:0] = (decoded_reg_strb.burst_len && !decoded_req_is_wr) ? field_storage.burst_len.burst_len.value : '0;
+    assign readback_array[13][31:8] = '0;
+    assign readback_array[14][7:0] = (decoded_reg_strb.burst_split_len && !decoded_req_is_wr) ? field_storage.burst_split_len.burst_len.value : '0;
+    assign readback_array[14][31:8] = '0;
+
+    // Reduce the array
     always_comb begin
         automatic logic [31:0] readback_data_var;
-        readback_data_var = '0;
-        if(rd_mux_addr == 6'h0) begin
-            readback_data_var[0] = field_storage.control.enable.value;
-            readback_data_var[1] = field_storage.control.hsync_pol.value;
-            readback_data_var[2] = field_storage.control.vsync_pol.value;
-        end
-        if(rd_mux_addr == 6'h4) begin
-            readback_data_var[7:0] = field_storage.clk_div.clk_div.value;
-        end
-        if(rd_mux_addr == 6'h8) begin
-            readback_data_var[31:0] = field_storage.hori_visible_size.hori_visible_size.value;
-        end
-        if(rd_mux_addr == 6'hc) begin
-            readback_data_var[31:0] = field_storage.hori_front_porch_size.hori_front_porch_size.value;
-        end
-        if(rd_mux_addr == 6'h10) begin
-            readback_data_var[31:0] = field_storage.hori_sync_size.hori_sync_size.value;
-        end
-        if(rd_mux_addr == 6'h14) begin
-            readback_data_var[31:0] = field_storage.hori_back_porch_size.hori_back_porch_size.value;
-        end
-        if(rd_mux_addr == 6'h18) begin
-            readback_data_var[31:0] = field_storage.vert_visible_size.vert_visible_size.value;
-        end
-        if(rd_mux_addr == 6'h1c) begin
-            readback_data_var[31:0] = field_storage.vert_front_porch_size.vert_front_porch_size.value;
-        end
-        if(rd_mux_addr == 6'h20) begin
-            readback_data_var[31:0] = field_storage.vert_sync_size.vert_sync_size.value;
-        end
-        if(rd_mux_addr == 6'h24) begin
-            readback_data_var[31:0] = field_storage.vert_back_porch_size.vert_back_porch_size.value;
-        end
-        if(rd_mux_addr == 6'h28) begin
-            readback_data_var[31:0] = field_storage.start_addr_low.start_addr_low.value;
-        end
-        if(rd_mux_addr == 6'h2c) begin
-            readback_data_var[31:0] = field_storage.start_addr_high.start_addr_high.value;
-        end
-        if(rd_mux_addr == 6'h30) begin
-            readback_data_var[31:0] = field_storage.frame_size.frame_size.value;
-        end
-        if(rd_mux_addr == 6'h34) begin
-            readback_data_var[7:0] = field_storage.burst_len.burst_len.value;
-        end
-        if(rd_mux_addr == 6'h38) begin
-            readback_data_var[7:0] = field_storage.burst_split_len.burst_len.value;
-        end
-        readback_data = readback_data_var;
         readback_done = decoded_req & ~decoded_req_is_wr;
         readback_err = '0;
+        readback_data_var = '0;
+        for(int i=0; i<15; i++) readback_data_var |= readback_array[i];
+        readback_data = readback_data_var;
     end
 
     assign cpuif_rd_ack = readback_done;

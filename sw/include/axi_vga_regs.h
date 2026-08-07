@@ -7,10 +7,11 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
 #include <stdint.h>
 #include <assert.h>
 
-// reg - axi_vga::control
+// Reg - axi_vga::control
 #define AXI_VGA__CONTROL__ENABLE_bm 0x1
 #define AXI_VGA__CONTROL__ENABLE_bp 0
 #define AXI_VGA__CONTROL__ENABLE_bw 1
@@ -24,91 +25,91 @@ extern "C" {
 #define AXI_VGA__CONTROL__VSYNC_POL_bw 1
 #define AXI_VGA__CONTROL__VSYNC_POL_reset 0x1
 
-// reg - axi_vga::clk_div
+// Reg - axi_vga::clk_div
 #define AXI_VGA__CLK_DIV__CLK_DIV_bm 0xff
 #define AXI_VGA__CLK_DIV__CLK_DIV_bp 0
 #define AXI_VGA__CLK_DIV__CLK_DIV_bw 8
 #define AXI_VGA__CLK_DIV__CLK_DIV_reset 0x1
 
-// reg - axi_vga::hori_visible_size
+// Reg - axi_vga::hori_visible_size
 #define AXI_VGA__HORI_VISIBLE_SIZE__HORI_VISIBLE_SIZE_bm 0xffffffff
 #define AXI_VGA__HORI_VISIBLE_SIZE__HORI_VISIBLE_SIZE_bp 0
 #define AXI_VGA__HORI_VISIBLE_SIZE__HORI_VISIBLE_SIZE_bw 32
 #define AXI_VGA__HORI_VISIBLE_SIZE__HORI_VISIBLE_SIZE_reset 0x1
 
-// reg - axi_vga::hori_front_porch_size
+// Reg - axi_vga::hori_front_porch_size
 #define AXI_VGA__HORI_FRONT_PORCH_SIZE__HORI_FRONT_PORCH_SIZE_bm 0xffffffff
 #define AXI_VGA__HORI_FRONT_PORCH_SIZE__HORI_FRONT_PORCH_SIZE_bp 0
 #define AXI_VGA__HORI_FRONT_PORCH_SIZE__HORI_FRONT_PORCH_SIZE_bw 32
 #define AXI_VGA__HORI_FRONT_PORCH_SIZE__HORI_FRONT_PORCH_SIZE_reset 0x1
 
-// reg - axi_vga::hori_sync_size
+// Reg - axi_vga::hori_sync_size
 #define AXI_VGA__HORI_SYNC_SIZE__HORI_SYNC_SIZE_bm 0xffffffff
 #define AXI_VGA__HORI_SYNC_SIZE__HORI_SYNC_SIZE_bp 0
 #define AXI_VGA__HORI_SYNC_SIZE__HORI_SYNC_SIZE_bw 32
 #define AXI_VGA__HORI_SYNC_SIZE__HORI_SYNC_SIZE_reset 0x1
 
-// reg - axi_vga::hori_back_porch_size
+// Reg - axi_vga::hori_back_porch_size
 #define AXI_VGA__HORI_BACK_PORCH_SIZE__HORI_BACK_PORCH_SIZE_bm 0xffffffff
 #define AXI_VGA__HORI_BACK_PORCH_SIZE__HORI_BACK_PORCH_SIZE_bp 0
 #define AXI_VGA__HORI_BACK_PORCH_SIZE__HORI_BACK_PORCH_SIZE_bw 32
 #define AXI_VGA__HORI_BACK_PORCH_SIZE__HORI_BACK_PORCH_SIZE_reset 0x1
 
-// reg - axi_vga::vert_visible_size
+// Reg - axi_vga::vert_visible_size
 #define AXI_VGA__VERT_VISIBLE_SIZE__VERT_VISIBLE_SIZE_bm 0xffffffff
 #define AXI_VGA__VERT_VISIBLE_SIZE__VERT_VISIBLE_SIZE_bp 0
 #define AXI_VGA__VERT_VISIBLE_SIZE__VERT_VISIBLE_SIZE_bw 32
 #define AXI_VGA__VERT_VISIBLE_SIZE__VERT_VISIBLE_SIZE_reset 0x1
 
-// reg - axi_vga::vert_front_porch_size
+// Reg - axi_vga::vert_front_porch_size
 #define AXI_VGA__VERT_FRONT_PORCH_SIZE__VERT_FRONT_PORCH_SIZE_bm 0xffffffff
 #define AXI_VGA__VERT_FRONT_PORCH_SIZE__VERT_FRONT_PORCH_SIZE_bp 0
 #define AXI_VGA__VERT_FRONT_PORCH_SIZE__VERT_FRONT_PORCH_SIZE_bw 32
 #define AXI_VGA__VERT_FRONT_PORCH_SIZE__VERT_FRONT_PORCH_SIZE_reset 0x1
 
-// reg - axi_vga::vert_sync_size
+// Reg - axi_vga::vert_sync_size
 #define AXI_VGA__VERT_SYNC_SIZE__VERT_SYNC_SIZE_bm 0xffffffff
 #define AXI_VGA__VERT_SYNC_SIZE__VERT_SYNC_SIZE_bp 0
 #define AXI_VGA__VERT_SYNC_SIZE__VERT_SYNC_SIZE_bw 32
 #define AXI_VGA__VERT_SYNC_SIZE__VERT_SYNC_SIZE_reset 0x1
 
-// reg - axi_vga::vert_back_porch_size
+// Reg - axi_vga::vert_back_porch_size
 #define AXI_VGA__VERT_BACK_PORCH_SIZE__VERT_BACK_PORCH_SIZE_bm 0xffffffff
 #define AXI_VGA__VERT_BACK_PORCH_SIZE__VERT_BACK_PORCH_SIZE_bp 0
 #define AXI_VGA__VERT_BACK_PORCH_SIZE__VERT_BACK_PORCH_SIZE_bw 32
 #define AXI_VGA__VERT_BACK_PORCH_SIZE__VERT_BACK_PORCH_SIZE_reset 0x1
 
-// reg - axi_vga::start_addr_low
+// Reg - axi_vga::start_addr_low
 #define AXI_VGA__START_ADDR_LOW__START_ADDR_LOW_bm 0xffffffff
 #define AXI_VGA__START_ADDR_LOW__START_ADDR_LOW_bp 0
 #define AXI_VGA__START_ADDR_LOW__START_ADDR_LOW_bw 32
 #define AXI_VGA__START_ADDR_LOW__START_ADDR_LOW_reset 0x0
 
-// reg - axi_vga::start_addr_high
+// Reg - axi_vga::start_addr_high
 #define AXI_VGA__START_ADDR_HIGH__START_ADDR_HIGH_bm 0xffffffff
 #define AXI_VGA__START_ADDR_HIGH__START_ADDR_HIGH_bp 0
 #define AXI_VGA__START_ADDR_HIGH__START_ADDR_HIGH_bw 32
 #define AXI_VGA__START_ADDR_HIGH__START_ADDR_HIGH_reset 0x0
 
-// reg - axi_vga::frame_size
+// Reg - axi_vga::frame_size
 #define AXI_VGA__FRAME_SIZE__FRAME_SIZE_bm 0xffffffff
 #define AXI_VGA__FRAME_SIZE__FRAME_SIZE_bp 0
 #define AXI_VGA__FRAME_SIZE__FRAME_SIZE_bw 32
 #define AXI_VGA__FRAME_SIZE__FRAME_SIZE_reset 0x0
 
-// reg - axi_vga::burst_len
+// Reg - axi_vga::burst_len
 #define AXI_VGA__BURST_LEN__BURST_LEN_bm 0xff
 #define AXI_VGA__BURST_LEN__BURST_LEN_bp 0
 #define AXI_VGA__BURST_LEN__BURST_LEN_bw 8
 #define AXI_VGA__BURST_LEN__BURST_LEN_reset 0x0
 
-// reg - axi_vga::burst_split_len
+// Reg - axi_vga::burst_split_len
 #define AXI_VGA__BURST_SPLIT_LEN__BURST_LEN_bm 0xff
 #define AXI_VGA__BURST_SPLIT_LEN__BURST_LEN_bp 0
 #define AXI_VGA__BURST_SPLIT_LEN__BURST_LEN_bw 8
 #define AXI_VGA__BURST_SPLIT_LEN__BURST_LEN_reset 0x0
 
-// addrmap - axi_vga
+// Addrmap - axi_vga
 typedef struct __attribute__ ((__packed__)) {
     uint32_t control;
     uint32_t clk_div;
