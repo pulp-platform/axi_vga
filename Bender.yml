@@ -14,10 +14,11 @@ package:
 dependencies:
   axi: { git: "https://github.com/pulp-platform/axi", version: 0.39.2 }
   common_cells: { git: "https://github.com/pulp-platform/common_cells", version: 1.33.0 }
-  register_interface : { git: "https://github.com/pulp-platform/register_interface", version: 0.4.2 }
+  apb: { git: https://github.com/pulp-platform/apb.git, version: 0.2.4 }
 
 sources:
   - src/axi_vga_reg_pkg.sv
+  - src/axi_vga_reg_offsets_pkg.sv
   - src/axi_vga_reg_top.sv
   - src/axi_vga_timing_fsm.sv
   - src/axi_vga_fetcher.sv
@@ -25,4 +26,5 @@ sources:
 
   - target: test
     files:
+      - test/tb_axi_vga_pkg.sv
       - test/tb_axi_vga.sv

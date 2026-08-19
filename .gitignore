@@ -7,3 +7,5 @@ vsim/transcript
 vsim/vsim.wlf
 vsim/work
 vsim/wlf*
+.venv/
+.venv-wsl/

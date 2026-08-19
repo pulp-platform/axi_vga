@@ -1,0 +1,176 @@
+// Copyright 2025 ETH Zurich and University of Bologna.
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+//
+// Christopher Reinwardt <creinwar@student.ethz.ch>
+// Serge Wüest  <swueest@student.ethz.ch>
+
+`ifndef AXI_VGA_RDL
+`define AXI_VGA_RDL
+
+addrmap axi_vga {
+    desc = "AXI VGA register file";
+
+    reg control {
+        default sw = rw;
+        default hw = r;
+        desc = "Control register";
+        field {
+            name = "enable";
+            desc = "Enables FSM.";
+        } enable [0:0] = 0x0;
+        field {
+            name = "hsync_pol";
+            desc = "Sets polarity for HSYNC. 0 - Active Low, 1 - Active High.";
+        } hsync_pol[1:1] = 0x1;
+        field {
+            name = "vsync_pol";
+            desc = "Sets polarity for VSYNC. 0 - Active Low, 1 - Active High.";
+        } vsync_pol[2:2] = 0x1;
+    };
+
+    reg clk_div {
+        desc = "Clock divider";
+        field {
+            name = "clk_div";
+            desc = "Clock divider.";
+            sw = rw;
+            hw = r;
+        } clk_div[7:0] = 0x1;
+    };
+
+    reg hori_visible_size {
+        field {
+            name = "hori_visible_size";
+            desc = "Size of horizontal visible area.";
+            sw   = rw;
+            hw   = r;
+        } hori_visible_size[31:0] = 0x1;
+    };
+
+    reg hori_front_porch_size {
+        field {
+            name = "hori_front_porch_size";
+            desc = "Size of horizontal front porch.";
+            sw   = rw;
+            hw   = r;
+        } hori_front_porch_size[31:0] = 0x1;
+    };
+
+    reg hori_sync_size {
+        field {
+            name = "hori_sync_size";
+            desc = "Size of horizontal sync area.";
+            sw   = rw;
+            hw   = r;
+        } hori_sync_size[31:0] = 0x1;
+    };
+
+    reg hori_back_porch_size {
+        field {
+            name = "hori_back_porch_size";
+            desc = "Size of horizontal back porch.";
+            sw   = rw;
+            hw   = r;
+        } hori_back_porch_size[31:0] = 0x1;
+    };
+
+    reg vert_visible_size {
+        field {
+            name = "vert_visible_size";
+            desc = "Size of vertical visible area.";
+            sw   = rw;
+            hw   = r;
+        } vert_visible_size[31:0] = 0x1;
+    };
+
+    reg vert_front_porch_size {
+        field {
+            name = "vert_front_porch_size";
+            desc = "Size of vertical front porch.";
+            sw   = rw;
+            hw   = r;
+        } vert_front_porch_size[31:0] = 0x1;
+    };
+
+    reg vert_sync_size {
+        field {
+            name = "vert_sync_size";
+            desc = "Size of vertical sync area.";
+            sw   = rw;
+            hw   = r;
+        } vert_sync_size[31:0] = 0x1;
+    };
+
+    reg vert_back_porch_size {
+        field {
+            name = "vert_back_porch_size";
+            desc = "Size of vertical back porch.";
+            sw   = rw;
+            hw   = r;
+        } vert_back_porch_size[31:0] = 0x1;
+    };
+
+    reg start_addr_low {
+        field {
+            name = "start_addr_low";
+            desc = "Low end of start address of frame buffer.";
+            sw   = rw;
+            hw   = r;
+        } start_addr_low[31:0] = 0x0;
+    };
+
+    reg start_addr_high {
+        field {
+            name = "start_addr_high";
+            desc = "High end of start address of frame buffer.";
+            sw   = rw;
+            hw   = r;
+        } start_addr_high[31:0] = 0x0;
+    };
+
+    reg frame_size {
+        field {
+            name = "frame_size";
+            desc = "Size of whole frame.";
+            sw   = rw;
+            hw   = r;
+        } frame_size[31:0] = 0x0;
+    };
+
+    reg burst_len {
+        field {
+            name = "burst_len";
+            desc = "Number of beats in a burst.";
+            sw   = rw;
+            hw   = r;
+        } burst_len[7:0] = 0x0;
+    };
+
+    reg burst_split_len {
+        field {
+            name = "burst_len";
+            desc = "Maximum number of beats in each burst requested from AXI";
+            sw   = rw;
+            hw   = r;
+        } burst_len[7:0] = 0x0;
+    };
+
+    control               control               @0x00;
+    clk_div               clk_div               @0x04;
+    hori_visible_size     hori_visible_size     @0x08;
+    hori_front_porch_size hori_front_porch_size @0x0C;
+    hori_sync_size        hori_sync_size        @0x10;
+    hori_back_porch_size  hori_back_porch_size  @0x14;
+    vert_visible_size     vert_visible_size     @0x18;
+    vert_front_porch_size vert_front_porch_size @0x1C;
+    vert_sync_size        vert_sync_size        @0x20;
+    vert_back_porch_size  vert_back_porch_size  @0x24;
+    start_addr_low        start_addr_low        @0x28;
+    start_addr_high       start_addr_high       @0x2C;
+    frame_size            frame_size            @0x30;
+    burst_len             burst_len             @0x34;
+    burst_split_len       burst_split_len       @0x38;
+};
+
+`endif // AXI_VGA_RDL

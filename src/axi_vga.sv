@@ -26,17 +26,17 @@ module axi_vga #(
   parameter type axi_req_t            = logic,
   parameter type axi_resp_t           = logic,
   parameter type axi_r_chan_t         = logic,
-  parameter type reg_req_t            = logic,
-  parameter type reg_resp_t           = logic
+  parameter type apb_req_t            = logic,
+  parameter type apb_resp_t           = logic
 )(
   input logic                     clk_i,
   input logic                     rst_ni,
 
   input logic                     test_mode_en_i,
 
-  // Regbus config ports
-  input  reg_req_t                reg_req_i,
-  output reg_resp_t               reg_rsp_o,
+  // APB configuration port
+  input  apb_req_t  apb_req_i,
+  output apb_resp_t apb_rsp_o,
 
   // AXI Data ports
   output axi_req_t                axi_req_o,
@@ -58,7 +58,7 @@ module axi_vga #(
   logic [7:0] clk_div;
   logic [7:0] clk_cnt_d, clk_cnt_q;
 
-  axi_vga_reg_pkg::axi_vga_reg2hw_t reg2hw;
+  axi_vga_reg_pkg::axi_vga__out_t reg2hw;
 
   axi_req_t  axi_req,  axi_req_split;
   axi_resp_t axi_resp, axi_resp_split;
@@ -74,100 +74,105 @@ module axi_vga #(
   logic valid, ready;
 
   // Clock divider constant
-  assign clk_div = |reg2hw.clk_div.q ? reg2hw.clk_div.q : 1;
+  assign clk_div = |reg2hw.clk_div.clk_div.value ? reg2hw.clk_div.clk_div.value : 1;
 
   // Cycle counter to scale the incoming clock
   assign clk_cnt_d = (clk_cnt_q < (clk_div-1)) ? clk_cnt_q + 8'b0000_0001 : 8'b0;
 
   // Regbus register interface
-  axi_vga_reg_top #(
-    .reg_req_t      ( reg_req_t           ),
-    .reg_rsp_t      ( reg_resp_t          ),
-    .AW             ( 6                   )
-  ) i_axi_vga_register_file (
-    .clk_i,
-    .rst_ni,
-    .reg_req_i,
-    .reg_rsp_o,
+  axi_vga_reg_top i_axi_vga_register_file (
+    .clk            ( clk_i        ),
+    .rst            ( ~rst_ni      ),
+
+    .s_apb_psel     ( apb_req_i.psel       ),
+    .s_apb_penable  ( apb_req_i.penable    ),
+    .s_apb_pwrite   ( apb_req_i.pwrite     ),
+    .s_apb_pprot    ( apb_req_i.pprot      ),
+    .s_apb_paddr    ( apb_req_i.paddr[5:0] ),
+    .s_apb_pwdata   ( apb_req_i.pwdata     ),
+    .s_apb_pstrb    ( apb_req_i.pstrb      ),
+
+    .s_apb_pready   ( apb_rsp_o.pready     ),
+    .s_apb_prdata   ( apb_rsp_o.prdata     ),
+    .s_apb_pslverr  ( apb_rsp_o.pslverr    ),
+	
     // To HW
-    .reg2hw         ( reg2hw              ), // Write
-    // Config
-    .devmode_i      ( '1                  )  // Explicit error for unmapped register access
-  );
+    .hwif_out       ( reg2hw       )// Write
+);
 
   // FSM managing the VGA signals
   axi_vga_timing_fsm #(
-    .RedWidth       ( RedWidth            ),
-    .GreenWidth     ( GreenWidth          ),
-    .BlueWidth      ( BlueWidth           ),
-    .HCountWidth    ( HCountWidth         ),
-    .VCountWidth    ( VCountWidth         )
+	.RedWidth       ( RedWidth            ),
+	.GreenWidth     ( GreenWidth          ),
+	.BlueWidth      ( BlueWidth           ),
+	.HCountWidth    ( HCountWidth         ),
+	.VCountWidth    ( VCountWidth         )
   ) i_axi_vga_timing_fsm (
-    .clk_i,
-    .rst_ni,
+	.clk_i,
+	.rst_ni,
 
-    .fsm_en_i       ( clk_cnt_q == 0      ),
-    .reg2hw_i       ( reg2hw              ),
+	.fsm_en_i       ( clk_cnt_q == 0      ),
+	.reg2hw_i       ( reg2hw              ),
 
-    // Data input
-    .red_i          ( red                 ),
-    .green_i        ( green               ),
-    .blue_i         ( blue                ),
-    .valid_i        ( valid               ),
-    .ready_o        ( ready               ),
+	// Data input
+	.red_i          ( red                 ),
+	.green_i        ( green               ),
+	.blue_i         ( blue                ),
+	.valid_i        ( valid               ),
+	.ready_o        ( ready               ),
 
-    // VGA interface
-    .hsync_o,
-    .vsync_o,
-    .red_o,
-    .green_o,
-    .blue_o
+	// VGA interface
+	.hsync_o,
+	.vsync_o,
+	.red_o,
+	.green_o,
+	.blue_o
   );
 
   axi_vga_fetcher #(
-    .RedWidth       ( RedWidth            ),
-    .GreenWidth     ( GreenWidth          ),
-    .BlueWidth      ( BlueWidth           ),
-    .AXIAddrWidth   ( AXIAddrWidth        ),
-    .AXIDataWidth   ( AXIDataWidth        ),
-    .AXIStrbWidth   ( AXIStrbWidth        ),
-    .axi_req_t      ( axi_req_t           ),
-    .axi_resp_t     ( axi_resp_t          )
+	.RedWidth       ( RedWidth            ),
+	.GreenWidth     ( GreenWidth          ),
+	.BlueWidth      ( BlueWidth           ),
+	.AXIAddrWidth   ( AXIAddrWidth        ),
+	.AXIDataWidth   ( AXIDataWidth        ),
+	.AXIStrbWidth   ( AXIStrbWidth        ),
+	.axi_req_t      ( axi_req_t           ),
+	.axi_resp_t     ( axi_resp_t          )
   ) i_axi_vga_fetcher (
-    .clk_i,
-    .rst_ni,
-    .enable_i       ( reg2hw.control.enable.q),
+	.clk_i,
+	.rst_ni,
+	.enable_i       ( reg2hw.control.enable.value),
 
-    .axi_req_o      ( axi_req             ),
-    .axi_resp_i     ( axi_resp            ),
+	.axi_req_o      ( axi_req             ),
+	.axi_resp_i     ( axi_resp            ),
 
-    .start_addr_i   ( {reg2hw.start_addr_high.q, reg2hw.start_addr_low.q}),
-    .frame_size_i   ( reg2hw.frame_size.q ),
-    .burst_len_i    ( reg2hw.burst_len.q  ),
-    .red_o          ( red                 ),
-    .green_o        ( green               ),
-    .blue_o         ( blue                ),
-    .valid_o        ( valid               ),
-    .ready_i        ( ready               )
+	.start_addr_i   ( {reg2hw.start_addr_high.start_addr_high.value, reg2hw.start_addr_low.start_addr_low.value}),
+	.frame_size_i   ( reg2hw.frame_size.frame_size.value ),
+	.burst_len_i    ( reg2hw.burst_len.burst_len.value  ),
+	.red_o          ( red                 ),
+	.green_o        ( green               ),
+	.blue_o         ( blue                ),
+	.valid_o        ( valid               ),
+	.ready_i        ( ready               )
   );
 
   axi_burst_splitter #(
-      .MaxReadTxns  ( MaxReadTxns   ),
-      .MaxWriteTxns ( 32'd1         ), // technically 0, but not supported
-      .FullBW       ( 1'b1          ),
-      .AddrWidth    ( AXIAddrWidth  ),
-      .DataWidth    ( AXIDataWidth  ),
-      .IdWidth      ( AXIIdWidth    ),
-      .UserWidth    ( AXIUserWidth  ),
-      .axi_req_t    ( axi_req_t     ),
-      .axi_resp_t   ( axi_resp_t    )
+	  .MaxReadTxns  ( MaxReadTxns   ),
+	  .MaxWriteTxns ( 32'd1         ), // technically 0, but not supported
+	  .FullBW       ( 1'b1          ),
+	  .AddrWidth    ( AXIAddrWidth  ),
+	  .DataWidth    ( AXIDataWidth  ),
+	  .IdWidth      ( AXIIdWidth    ),
+	  .UserWidth    ( AXIUserWidth  ),
+	  .axi_req_t    ( axi_req_t     ),
+	  .axi_resp_t   ( axi_resp_t    )
   ) i_axi_burst_splitter (
-      .clk_i,
-      .rst_ni,
-      .slv_req_i  ( axi_req        ),
-      .slv_resp_o ( axi_resp       ),
-      .mst_req_o  ( axi_req_split  ),
-      .mst_resp_i ( axi_resp_split )
+	  .clk_i,
+	  .rst_ni,
+	  .slv_req_i  ( axi_req        ),
+	  .slv_resp_o ( axi_resp       ),
+	  .mst_req_o  ( axi_req_split  ),
+	  .mst_resp_i ( axi_resp_split )
   );
 
   // Add stream FIFO in the response path to buffer requested data
@@ -186,32 +191,39 @@ module axi_vga #(
   assign axi_resp_split.b_valid  = axi_resp_i.b_valid;
   assign axi_resp_split.b        = axi_resp_i.b;
 
-  stream_fifo #(
-    .FALL_THROUGH ( 32'd0               ),
-    .DEPTH        ( BufferDepth + 32'd1 ), // +1 as the FIFO cannot be pushed and popped in-cycle
-    .T            ( axi_r_chan_t        )
-  ) i_stream_fifo (
-    .clk_i,
-    .rst_ni,
-    .flush_i    ( 1'b0                   ),
-    .testmode_i ( test_mode_en_i         ),
-    .usage_o    ( /*NC*/                 ),
-    .data_i     ( axi_resp_i.r           ),
-    .valid_i    ( axi_resp_i.r_valid     ),
-    .ready_o    ( axi_req_o.r_ready      ),
-    .data_o     ( axi_resp_split.r       ),
-    .valid_o    ( axi_resp_split.r_valid ),
-    .ready_i    ( axi_req_split.r_ready  )
+axi_r_chan_t fifo_r_in;
+axi_r_chan_t fifo_r_out;
+
+assign fifo_r_in       = axi_resp_i.r;
+assign axi_resp_split.r = fifo_r_out;
+
+stream_fifo #(
+      .FALL_THROUGH ( 1'b0                ),
+      .DATA_WIDTH   ( $bits(axi_r_chan_t) ),
+      .DEPTH        ( BufferDepth + 32'd1 ), // +1 as the FIFO cannot be pushed and popped in-cycle
+      .T            ( axi_r_chan_t        )
+) i_stream_fifo (
+	.clk_i,
+	.rst_ni,
+	.flush_i    ( 1'b0                   ),
+	.testmode_i ( test_mode_en_i         ),
+	.usage_o    ( /*NC*/                 ),
+  .data_i     ( fifo_r_in              ),
+	.valid_i    ( axi_resp_i.r_valid     ),
+	.ready_o    ( axi_req_o.r_ready      ),
+	.data_o     ( fifo_r_out             ),
+	.valid_o    ( axi_resp_split.r_valid ),
+	.ready_i    ( axi_req_split.r_ready  )
   );
 
   // combine the read handshaking and the credit counter
   stream_join #(
-    .N_INP ( 32'd2 )
+	.N_INP ( 32'd2 )
   ) i_stream_join (
-    .inp_valid_i ( {credit_valid, axi_req_split.ar_valid } ),
-    .inp_ready_o ( {credit_ready, axi_resp_split.ar_ready} ),
-    .oup_valid_o ( axi_req_o.ar_valid                      ),
-    .oup_ready_i ( axi_resp_i.ar_ready                     )
+	.inp_valid_i ( {credit_valid, axi_req_split.ar_valid } ),
+	.inp_ready_o ( {credit_ready, axi_resp_split.ar_ready} ),
+	.oup_valid_o ( axi_req_o.ar_valid                      ),
+	.oup_ready_i ( axi_resp_i.ar_ready                     )
   );
 
   // read is completed on valid and ready r.last being popped from FIFO
@@ -219,18 +231,18 @@ module axi_vga #(
 
   // simple credit counter
   always_comb begin : proc_credit_counter
-    // default
-    counter_d    = counter_q;
-    credit_valid = 1'b0;
-    // completed
-    if (read_completed) begin
-      counter_d = counter_d - 32'd1;
-    end
-    // possible issue?
-    if (counter_d < BufferDepth) begin
-      credit_valid = 1'b1;
-      counter_d = credit_ready ? counter_d + 32'd1 : counter_d;
-    end
+	// default
+	counter_d    = counter_q;
+	credit_valid = 1'b0;
+	// completed
+	if (read_completed) begin
+	  counter_d = counter_d - 32'd1;
+	end
+	// possible issue?
+	if (counter_d < BufferDepth) begin
+	  credit_valid = 1'b1;
+	  counter_d = credit_ready ? counter_d + 32'd1 : counter_d;
+	end
   end
 
   // registers
@@ -247,6 +259,6 @@ module axi_vga #(
 
   // Ensure the word width is a multiple of the pixel width
   `ASSERT_INIT(AXI_is_multiple_of_PixelWidth,
-    (AXIDataWidth % (RedWidth + GreenWidth + BlueWidth)) == 0)
+	(AXIDataWidth % (RedWidth + GreenWidth + BlueWidth)) == 0)
 
 endmodule

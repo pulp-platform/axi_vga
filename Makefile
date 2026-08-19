@@ -12,8 +12,12 @@ clean:
 	rm -f bender Bender.lock
 
 bender:
-	curl --proto '=https' --tlsv1.2 -sSf https://pulp-platform.github.io/bender/init | bash -s -- 0.25.3
-	touch bender
+	@if command -v bender >/dev/null 2>&1; then \
+		ln -sf $$(command -v bender) bender; \
+	else \
+		curl --proto '=https' --tlsv1.2 -sSf https://pulp-platform.github.io/bender/init | bash -s -- 0.25.3; \
+		touch bender; \
+	fi
 
 # Generate VGA RTL
 
