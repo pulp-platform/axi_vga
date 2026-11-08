@@ -12,7 +12,7 @@ root=$(cd "$here/../.." && pwd)
 export AXI_DIR COMMON_CELLS_DIR REGISTER_INTERFACE_DIR RUN_DIR
 export VGA_TEST_ROOT="$root"
 export FETCHER_SOURCE="${FETCHER_SOURCE:-$root/src/axi_vga_fetcher.sv}"
-mkdir "$RUN_DIR"
+mkdir "$RUN_DIR" || exit 1
 python3 - <<'PY'
 from pathlib import Path
 import os,yaml,json,hashlib
