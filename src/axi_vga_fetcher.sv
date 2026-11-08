@@ -58,7 +58,8 @@ module axi_vga_fetcher #(
   logic [31:0] frame_size_q, frame_size_d, remaining_len;
   logic [7:0]  burst_len_q, burst_len_d, last_len_d, last_len_q;
 
-  logic resp_last_q;
+  // Retain an accepted completion until the request state consumes it.
+  logic resp_last_q, resp_last_d;
 
   logic first_req_q, first_req_d;
   logic init_done_q, init_done_d;
@@ -102,6 +103,8 @@ module axi_vga_fetcher #(
     first_req_d       = first_req_q;
     req_state_d       = req_state_q;
     req_addr_d        = req_addr_q;
+    resp_last_d       = enable_i & (resp_last_q |
+        (axi_resp.r_valid & axi_req.r_ready & axi_resp.r.last));
 
     axi_req.ar        = '0;
     axi_req.ar.addr   = req_addr_q;
@@ -161,9 +164,14 @@ module axi_vga_fetcher #(
         axi_req.ar_valid = 1'b0;
 
         if(enable_i) begin
-          if((axi_resp.r_valid & axi_resp.r.last & !resp_last_q) | first_req_q) begin
+          if(resp_last_d | first_req_q) begin
             req_state_d = REQ;
             first_req_d = 1'b0;
+            // Startup consumes its own token. Retain a simultaneous completion.
+            if(!first_req_q) begin
+              resp_last_d = resp_last_q &
+                  (axi_resp.r_valid & axi_req.r_ready & axi_resp.r.last);
+            end
             if((req_addr_q >= frame_start_q+frame_size_q-((last_len_q+1)*AXIStrbWidth))) begin
               // Was last REQ
               frame_start_d = start_addr;
@@ -323,7 +331,7 @@ module axi_vga_fetcher #(
       new_beat_data_q         <= new_beat_data_d;
 
       offset_q                <= offset_d;
-      resp_last_q             <= axi_resp.r.last;
+      resp_last_q             <= resp_last_d;
     end
   end
 endmodule
