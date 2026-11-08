@@ -2,14 +2,12 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 set out [file normalize $env(OUT)]
-set root [file normalize $env(INPUTS)]
 set variant $env(VARIANT)
 set module $env(MODULE)
 set top $env(TOP)
-set here [file dirname [file normalize [info script]]]
 set file [open $out/sources.list r];set sources [split [string trim [read $file]] "\n"];close $file
 set file [open $out/includes.list r];set include_paths [split [string trim [read $file]] "\n"];close $file
-set_app_var search_path [concat [list /eda/synopsys/syn/W-2024.09-SP1/libraries/syn] $include_paths]
+set_app_var search_path [concat [get_app_var search_path] $include_paths]
 set_app_var target_library [list gtech.db]
 set_app_var synthetic_library [list standard.sldb]
 set_app_var link_library [list * gtech.db standard.sldb]

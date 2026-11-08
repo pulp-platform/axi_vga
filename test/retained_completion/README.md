@@ -48,7 +48,7 @@ The original timing command is expected to fail. Each run has its own output,
 objects, input SHA list and log. The HDL limit is 2 ms and the wall limit is
 600 seconds. A success marker alone is insufficient. Check the independent
 reader result, normal finish, return code and absence of assertion failures.
-The public reader accepts only the unit tests. It requires no SoC or ELF helper.
+Run the independent reader for each public unit profile.
 
 ## Pixel and transaction results
 
@@ -88,7 +88,8 @@ vcs -full64 -sverilog -assert svaext -timescale=1ns/1ps \
   "$VGA_CHECKOUT/src/axi_vga_fetcher.sv" \
   "$VGA_CHECKOUT/test/retained_completion/tb_completion_edges.sv" \
   -top tb_completion_edges -o simv -Mdir=objects >compile.log 2>&1
-timeout 600 ./simv >stdout.log 2>&1
+printf '%s\n' 'run 10 us' quit >limit.ucli
+timeout 600 ./simv -ucli -do limit.ucli >stdout.log 2>&1
 ```
 
 Repeat in a separate directory with the original source. The identical four
@@ -110,19 +111,19 @@ separates epochs. This is not a claim about arbitrary unmatched response inputs.
 
 ## Module implementation checks
 
-Use DC W-2024.09-SP1 and the typed `v01_vga_fetcher_impl.sv` wrapper. Set a new
+Use DC W-2024.09-SP1 and the typed `axi_vga_fetcher_synth.sv` wrapper. Set a new
 absolute output directory for each source. The wrapper exposes all public
 fetcher inputs and outputs and fixes RGB565, address48 and data64.
 
 ```sh
 mkdir /tmp/vga-completion/dc-candidate
 printf '%s\n' "$COMMON_CELLS_DIR/src/cf_math_pkg.sv" "$AXI_DIR/src/axi_pkg.sv" \
-  "$PWD/src/axi_vga_fetcher.sv" "$PWD/test/retained_completion/v01_vga_fetcher_impl.sv" \
+  "$PWD/src/axi_vga_fetcher.sv" "$PWD/test/retained_completion/axi_vga_fetcher_synth.sv" \
   > /tmp/vga-completion/dc-candidate/sources.list
 printf '%s\n' "$COMMON_CELLS_DIR/include" "$AXI_DIR/include" "$REGISTER_INTERFACE_DIR/include" \
   > /tmp/vga-completion/dc-candidate/includes.list
-OUT=/tmp/vga-completion/dc-candidate INPUTS="$PWD" VARIANT=candidate MODULE=vga \
-  TOP=v01_vga_fetcher_impl timeout 1800 dc_shell \
+OUT=/tmp/vga-completion/dc-candidate VARIANT=candidate MODULE=vga \
+  TOP=axi_vga_fetcher_synth timeout 1800 dc_shell \
   -f test/retained_completion/check_structure.tcl > /tmp/vga-completion/dc-candidate/dc.log 2>&1
 ```
 
@@ -142,3 +143,9 @@ Apache-2.0 license and the original public-test provenance header.
 AI assistance: OpenAI Codex assisted implementation, test preparation and
 validation. A separate AI technical review is recorded with the contribution.
 This does not claim a human review.
+
+The display test and checker use the `VGA_TEST_` prefix for observation records
+and the `VGA_TEST_UNIT_PROFILE` option. The companion bus-error test uses the
+same records. The checker accepts the two public top files
+`tb_axi_vga_completion.sv` and `tb_vga_buserr.sv`. Its scope is limited to the
+listed unit profiles.

@@ -26,7 +26,7 @@ def sources(package):
  return list(visit(yaml.safe_load((package/'Bender.yml').read_text())['sources']))
 files=sources(cc)+sources(axi)+[reg/'vendor/lowrisc_opentitan/src'/n for n in ['prim_subreg_arb.sv','prim_subreg.sv','prim_subreg_ext.sv']]
 files += [root/'src'/n for n in ['axi_vga_reg_pkg.sv','axi_vga_reg_top.sv','axi_vga_timing_fsm.sv']]
-files += [Path(os.environ['FETCHER_SOURCE']),root/'src/axi_vga.sv',root/'test/retained_completion/tb_e_vga_unit.sv']
+files += [Path(os.environ['FETCHER_SOURCE']),root/'src/axi_vga.sv',root/'test/retained_completion/tb_axi_vga_completion.sv']
 files=list(dict.fromkeys(files));includes=[cc/'include',axi/'include',reg/'include']
 (out/'sources.f').write_text(''.join('+incdir+'+str(p)+'\n' for p in includes)+''.join(str(p)+'\n' for p in files))
 frozen=files+[p for d in includes for p in d.rglob('*.svh')]
@@ -34,13 +34,13 @@ frozen=files+[p for d in includes for p in d.rglob('*.svh')]
 (out/'limit.ucli').write_text('run 2 ms\nquit\n')
 PY
 cd "$RUN_DIR"
-timeout 600 vcs -full64 -sverilog -assert svaext -timescale=1ns/1ps +vcs+lic+wait -top tb_e_vga_unit -o simv -Mdir=objects -f sources.f >compile.log 2>&1
+timeout 600 vcs -full64 -sverilog -assert svaext -timescale=1ns/1ps +vcs+lic+wait -top tb_axi_vga_completion -o simv -Mdir=objects -f sources.f >compile.log 2>&1
 rc=$?; echo "$rc" >compile.rc
 if [[ $rc != 0 ]]; then exit "$rc"; fi
 status=0
 for profile in timing flow restart; do
  mkdir "$profile"
- (cd "$profile"; timeout 600 ../simv -ucli -do ../limit.ucli "+E_VGA_UNIT_PROFILE=$profile" >stdout.log 2>&1; echo "$?" >process.rc)
- if ! grep -qx "E_VGA_UNIT_PASS profile=$profile" "$profile/stdout.log"; then status=1; fi
+ (cd "$profile"; timeout 600 ../simv -ucli -do ../limit.ucli "+VGA_TEST_UNIT_PROFILE=$profile" >stdout.log 2>&1; echo "$?" >process.rc)
+ if ! grep -qx "VGA_TEST_UNIT_PASS profile=$profile" "$profile/stdout.log"; then status=1; fi
 done
 exit "$status"

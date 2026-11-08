@@ -2,24 +2,21 @@
 # Copyright 2026 CheshireAra contributors.
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
-"""Review finite E9 observations against public transactions and RGB565 inputs."""
+"""Check public axi_vga display tests against transactions and RGB565 inputs."""
 import sys
 sys.dont_write_bytecode = True
 import argparse
 from collections import Counter, defaultdict, deque
 import hashlib
-import importlib.util
 import json
 from pathlib import Path
 import re
 
 HERE = Path(__file__).resolve().parent
-TAG = re.compile(r'\[E_VGA_([A-Z_]+)\]\s*(.*)')
+TAG = re.compile(r'\[VGA_TEST_([A-Z_]+)\]\s*(.*)')
 KEY = re.compile(r'(\w+)=([^\s]+)')
-CASES = {'unit': {'timing': [901,902], 'flow': [903,904,905], 'restart': [906,907,908]},
-         'soc': {'pixels': [901,902], 'reset': [903,903], 'buserr': [911,912,913,914]}}
-FORMAL = {'unit': {901:{1},902:{2},903:{3},904:{4},905:{6},906:{8},907:{10},908:{12}},
-          'soc': {901:{1},902:{3},903:{5},911:{10},912:{11},913:{12},914:{13}}}
+CASES = {'unit': {'timing': [901,902], 'flow': [903,904,905], 'restart': [906,907,908]}}
+FORMAL = {'unit': {901:{1},902:{2},903:{3},904:{4},905:{6},906:{8},907:{10},908:{12}}}
 
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -63,9 +60,9 @@ class Audit:
 def rows_from_text(text,audit):
     rows=[]
     for n,line in enumerate(text.splitlines(),1):
-        if re.search(r'\bE_VGA_(?:ERROR|UNIT_FAIL)\b',line):audit.bad('original_error','Original VGA data reports an error',line=n,text=line)
+        if re.search(r'\bVGA_TEST_(?:ERROR|UNIT_FAIL)\b',line):audit.bad('original_error','Original VGA data reports an error',line=n,text=line)
         elif re.search(r'Fatal:|Fatal-\[|Error-\[|Assertion.*(?:fail|error)|started at .*failed at',line,re.I):audit.bad('simulator_error','Original simulator reports an error',line=n,text=line)
-        if 'E_VGA_CONTROL_ERROR' in line:audit.lack('finite_control','The required stimulus did not complete',line=n,text=line)
+        if 'VGA_TEST_CONTROL_ERROR' in line:audit.lack('finite_control','The required stimulus did not complete',line=n,text=line)
         m=TAG.search(line)
         if not m:continue
         fields=KEY.findall(m[2]);r=dict(fields)
@@ -73,44 +70,6 @@ def rows_from_text(text,audit):
         r.update(_kind=m[1],_line=n,_raw=line);rows.append(r)
     return rows
 
-def soc_observer_cycles(rows,a):
-    """Align fixed SoC observers by exact public time; preserve raw fields."""
-    anchors={};counts=Counter();aligned=[]
-    for row in rows:
-        if row['_kind']!='PIN' or row.get('sample')!='pre':continue
-        cycle=a.number(row,'cycle');time=a.number(row,'time_ps')
-        if time is None:continue
-        a.equal('SoC_PIN_clock_phase',time%5000,0,line=row['_line'])
-        a.equal('SoC_PIN_counter_offset',cycle,time//5000+1,line=row['_line'])
-        if cycle is not None and time%5000==0 and cycle==time//5000+1:
-            if time in anchors:a.bad('SoC_PIN_anchor_duplicate','Two main pre samples occupy the same clock',time_ps=time)
-            else:anchors[time]=cycle
-    for original in rows:
-        tag=original['_kind']
-        if tag not in ('PIN','MMIO','FLOW','AXI'):
-            aligned.append(original);continue
-        row=dict(original);row['_observed_cycle']=row.get('cycle')
-        cycle=a.number(row,'cycle');time=a.number(row,'time_ps')
-        delta=1 if tag=='PIN' and row.get('sample')=='post' else 0
-        side=row.get('side');tap=tag=='AXI' and side in ('vga','cpu','ddr','peer')
-        if tag=='AXI' and not tap and side!='fetcher':
-            a.bad('SoC_observer_side','The fixed SoC observer has an unknown side',side=side,line=row['_line'])
-            row['cycle']='x';aligned.append(row);continue
-        if time is None:
-            row['cycle']='x';aligned.append(row);continue
-        edge=time-delta
-        a.equal('SoC_observer_clock_phase',edge>=0 and edge%5000==0,True,line=row['_line'])
-        expected=edge//5000+(0 if tap else 1)
-        a.equal('SoC_observer_counter_offset',cycle,expected,side=side,tag=tag,line=row['_line'])
-        if cycle is None or edge<0 or edge%5000 or cycle!=expected:
-            row['cycle']='x';aligned.append(row);continue
-        canonical=edge//5000+1
-        if edge in anchors:a.equal('SoC_observer_main_PIN_anchor',canonical,anchors[edge],line=row['_line'])
-        row['cycle']=str(canonical);row['_sample_time_ps']=edge
-        counts['tap' if tap else 'main']+=1;aligned.append(row)
-    a.details['observer_alignment']=dict(main_PIN_anchors=len(anchors),aligned=dict(counts),
-        policy='SoC tap cycles=time_ps/5000; main cycles=time_ps/5000+1; post samples add1ps. Original fields remain in _observed_cycle and _raw.')
-    return aligned
 
 def pixel(i,epoch):
     return (((3*i+5*epoch+1)&31)<<11)|(((5*i+7*epoch+2)&63)<<5)|((11*i+3*epoch+4)&31)
@@ -146,12 +105,12 @@ def sequence(a,name,actual,expected):
 
 def expected_start(kind,cid):
     if cid is None:return None
-    if kind=='unit':return 0x10010fff0 if cid==902 else 0x10fff0
-    return 0x8060fff0+0x1000*(cid-911) if cid>=911 else 0x1400fff0
+    return 0x10010fff0 if cid==902 else 0x10fff0
+
 
 def expected_config(kind,cid):
     positive=cid==902
-    length=0 if cid==902 or (kind=='soc' and cid>=911) else 15 if cid==904 else 7
+    length=0 if cid == 902 else 15 if cid==904 else 7
     start=expected_start(kind,cid)
     return [6 if positive else 0,8,16,2,3,3,8,1,2,1,start&0xffffffff,start>>32,256,length]
 
@@ -159,13 +118,13 @@ def register_observations(rows,kind,a):
     values=[6,1]+[1]*8+[0]*4
     configs=[];mmio_count=0;write_order=[];read_order=[]
     for r in rows:
-        if r['_kind'] in ('RESET','RESET_SAMPLE'):
-            asserted=r.get('asserted')=='1' or r.get('event')=='assert' or r.get('common')=='0'
+        if r['_kind']=='RESET':
+            asserted=r.get('asserted')=='1'
             if asserted:values=[6,1]+[1]*8+[0]*4;write_order=[];read_order=[]
-        if r['_kind']!='MMIO' or (kind=='soc' and r.get('device')!='vga'):continue
+        if r['_kind'] != 'MMIO':continue
         mmio_count+=1;addr=a.number(r,'addr',16);write=a.number(r,'write',2);err=a.number(r,'error',2)
         if addr is None or write is None or err is None:continue
-        a.equal('VGA_register_base',addr&~63,0 if kind=='unit' else 0x03007000,line=r['_line'])
+        a.equal('VGA_register_base',addr&~63,(0),line=r['_line'])
         index=(addr&63)//4
         if addr%4 or index>=14:a.bad('VGA_register_address','Unexpected VGA register access',address=addr,line=r['_line']);continue
         a.equal('VGA_register_error',err,0,line=r['_line'])
@@ -183,7 +142,7 @@ def register_observations(rows,kind,a):
             a.equal('VGA_masked_readback',a.number(r,'rdata',16),values[index],offset=4*index,line=r['_line'])
             if write_order==list(range(index+1)) and read_order==list(range(index)):read_order.append(index)
             if read_order==list(range(14)) and all(v is not None for v in values):
-                cid=integer(r.get('case'));expected=expected_config(kind,cid) if cid in FORMAL[kind] else None
+                cid=integer(r.get('case'));expected=expected_config(kind,cid) if cid in FORMAL['unit'] else None
                 if expected is not None:
                     a.equal('VGA_finite_configuration',values,expected,case=cid,line=r['_line']);configs.append((cid,integer(r.get('epoch'))));a.details.setdefault('_configuration_rows',[]).append(r)
     if not mmio_count:a.lack('VGA_MMIO','No accepted VGA register access exists')
@@ -223,11 +182,8 @@ def pin_observations(rows,kind,profile,a):
         if r['_kind']=='RESET' and (r.get('asserted')=='1' or r.get('event')=='assert'):
             t=integer(r.get('time_ps'))
             if t is not None:resets.append(t)
-        if r['_kind']=='RESET_SAMPLE' and r.get('common')=='0':
-            t=integer(r.get('time_ps'))
-            if t is not None:resets.append(t)
         if r['_kind']=='PIN_CHANGE':changes.append(r)
-    model=Raster();last_cycle=None;last_time=None;coordinates={};formal=Counter();black=Counter();seen=Counter();recover={};last_pin=None;reset_index=0;resets.sort();post_samples=[];stops=[]
+    model=Raster();last_cycle=None;last_time=None;coordinates={};formal=Counter();black=Counter();seen=Counter();reset_index=0;resets.sort();post_samples=[];stops=[]
     for c,group in sorted(cycles.items()):
         timing=[integer(r.get('time_ps')) for r in group if integer(r.get('time_ps')) is not None]
         t=min(timing) if timing else None
@@ -260,26 +216,25 @@ def pin_observations(rows,kind,profile,a):
             if not model.visible():a.equal('blanking_pre',rgb,0,cycle=c)
             if model.tick() and model.visible():
                 selected=epoch in FORMAL[kind].get(cid,set())
-                target_frames=(recover.get((cid,epoch)),recover.get((cid,epoch),-10)+1) if kind=='soc' and profile=='buserr' else (1,2)
+                target_frames=((1,2))
                 if selected and model.frame in target_frames:
                     a.equal('RGB565_pixel',rgb,pixel(16*model.v+model.h,epoch),case=cid,epoch=epoch,frame=model.frame,x=model.h,y=model.v,cycle=c)
                     formal[(cid,epoch)]+=1
-                if kind=='unit' and cid==905 and epoch==5 and model.frame<2:
+                if cid == 905 and epoch == 5 and (model.frame < 2):
                     a.equal('withheld_response_black',rgb,0,frame=model.frame,cycle=c);black[(cid,epoch)]+=1
             seen[(cid,epoch)]+=1
         model.advance()
         # Accepted MMIO takes effect after the old state has consumed this edge.
         for r in group:
-            if r['_kind']=='MMIO' and (kind=='unit' or r.get('device')=='vga') and integer(r.get('write'),2)==1 and integer(r.get('error'),2)==0:
+            if r['_kind'] == 'MMIO' and integer(r.get('write'), 2) == 1 and (integer(r.get('error'), 2) == 0):
                 addr=integer(r.get('addr'),16)
                 if addr is not None:
                     data=integer(r.get('wdata'),16)
                     if (addr&63)==0 and data is not None and model.control&1 and not data&1:
                         stops.append(dict(case=integer(r.get('case')),epoch=integer(r.get('epoch')),cycle=c,h=model.h,v=model.v,frame=model.frame))
                     model.write(addr&63,data)
-            if r['_kind']=='MMIO' and kind=='soc' and r.get('device')=='buserr_vga' and integer(r.get('write'),2)==0 and integer(r.get('addr'),16)==0x03009028:
-                recover[(integer(r.get('case')),integer(r.get('epoch')))]=model.frame+1
-        if pre and not post and (kind=='unit' or model.control&1 or model.running):a.lack('pin_post','Actual post-update public pins are absent',cycle=c)
+
+        if pre and (not post):a.lack('pin_post','Actual post-update public pins are absent',cycle=c)
         for r in post:
             hs=a.number(r,'hsync',2);vs=a.number(r,'vsync',2);hgold,vgold=model.sync()
             a.equal('hsync_post',hs,hgold,cycle=c);a.equal('vsync_post',vs,vgold,cycle=c)
@@ -290,7 +245,7 @@ def pin_observations(rows,kind,profile,a):
         last_cycle=c;last_time=clock_time
     expected=Counter((cid,next(iter(FORMAL[kind][cid]))) for cid in set(CASES[kind][profile]))
     for key in expected:finite_count(a,'formal_pixel_count',formal[key],256,case=key[0],epoch=key[1])
-    if kind=='unit' and profile=='flow':finite_count(a,'underflow_black_count',black[(905,5)],256)
+    if profile == 'flow':finite_count(a,'underflow_black_count',black[(905,5)],256)
     if not changes:a.lack('pin_changes','No public pin change stream exists')
     changes_at=defaultdict(list)
     for r in changes:
@@ -330,7 +285,7 @@ def tagged_rows(rows):
 
 def axi_observations(rows,kind,profile,a):
     """Bind R to independent acceptance times, never to a shortened R list."""
-    primary='external' if kind=='unit' else 'vga';streams=defaultdict(list);witness=defaultdict(dict);counts=Counter();vga_errors=[]
+    primary='external';streams=defaultdict(list);witness=defaultdict(dict);counts=Counter();vga_errors=[]
     accepted_ar=Counter();ar_stalls=Counter();inner_stalls=Counter();ledger={}
     for serial,row in tagged_rows(rows):
         cid=integer(row.get('case'));epoch=integer(row.get('epoch'));cycle=integer(row.get('cycle'))
@@ -372,14 +327,14 @@ def axi_observations(rows,kind,profile,a):
                 response=a.number(row,'resp',16)
                 if response is not None and response not in (0,2,3):a.bad('AXI_response','Unexpected completed response code',actual=response,line=row['_line'])
                 if side==primary:a.equal('external_RLAST',a.number(row,'last',2),1,line=row['_line'])
-                if response in (2,3) and not(kind=='soc' and profile=='buserr'):a.bad('unexpected_VGA_error','A non-error profile returned a completed AXI error',resp=response,line=row['_line'])
+                if response in (2, 3):a.bad('unexpected_VGA_error','A non-error profile returned a completed AXI error',resp=response,line=row['_line'])
         # A held request may be discarded by the explicitly selected reset.
-        aborted=(kind=='unit' and (cid,epoch) in ((905,5),(908,11))) or (kind=='soc' and profile=='reset' and epoch==4)
+        aborted=(cid,epoch) in ((905,5),(908,11))
         if held and not aborted:
             for channel in held:a.lack('AXI_stalled_tail','The captured stream ends with an unaccepted valid channel',channel=channel,side=side,case=cid,epoch=epoch)
         ar_cycles=set(ars);r_cycles=set(responses);w_ar=set();w_r=set();unknown_r_witness=[];ar_holes=[]
         for cycle,row in wr.items():
-            arfield='ar_accept' if side==primary else 'logical_ar' if kind=='soc' else None
+            arfield='ar_accept' if side==primary else (None)
             if arfield is not None:
                 value=a.number(row,arfield,2)
                 if value==1:w_ar.add(cycle)
@@ -388,7 +343,7 @@ def axi_observations(rows,kind,profile,a):
             valid=a.number(row,validfield,2);ready=a.number(row,readyfield,2,required=valid!=0)
             if valid==1 and ready==1:w_r.add(cycle)
             elif valid is None or valid==1 and ready is None:unknown_r_witness.append(cycle)
-        if side==primary or kind=='soc':
+        if side == primary:
             for cycle in ar_cycles-w_ar:a.lack('AR_accept_witness','An accepted header lacks its independent acceptance witness',side=side,cycle=cycle)
             for cycle in w_ar-ar_cycles:a.lack('AR_capture','An independent acceptance has no complete public AR record',side=side,cycle=cycle)
         for cycle in r_cycles-w_r:a.lack('R_accept_witness','An accepted R lacks its independent acceptance witness',side=side,cycle=cycle)
@@ -403,14 +358,14 @@ def axi_observations(rows,kind,profile,a):
         headers=[];prefix=0;known_prefix=True
         for ordinal,cycle in enumerate(all_ar):
             row=ars.get(cycle);shadow=wr.get(cycle,{})
-            address=a.number(row,'addr',16) if row else a.number(shadow,'logical_addr',16) if side=='fetcher' and kind=='soc' else None
-            length=a.number(row,'len',16) if row else a.number(shadow,'logical_len',16) if side=='fetcher' and kind=='soc' else None
+            address=a.number(row,'addr',16) if row else (None)
+            length=a.number(row,'len',16) if row else (None)
             if row:
                 for field,gold in (('id',0),('size',3),('burst',1),('cache',2)):
                     a.equal('AXI_AR_shape',a.number(row,field,16),gold,field=field,line=row['_line'])
                 for field in ('lock','prot','qos','region','user'):
                     if field in row:a.equal('AXI_AR_zero_field',a.number(row,field,16),0,field=field,line=row['_line'])
-            start=expected_start(kind,cid) if cid in FORMAL[kind] else None
+            start=expected_start(kind,cid) if cid in FORMAL['unit'] else None
             if side==primary:
                 if row:a.equal('external_single_beat',length,0,line=row['_line'])
                 if address is not None and start is not None:
@@ -445,7 +400,7 @@ def axi_observations(rows,kind,profile,a):
         if expected_count is not None and not aborted and not unit_logical_loss:finite_count(a,'AXI_response_count',len(all_r),expected_count,case=cid,epoch=epoch,side=side)
         if unknown_header_cycle is not None:a.lack('R_header_alignment','An unknown AR length prevents later response attribution',case=cid,epoch=epoch,side=side)
         lost_unlocated=expected_count is not None and len(all_r)<expected_count and not aborted
-        # Missing raw R only is located exactly by v3 witness. If both streams
+        # A missing raw R is located exactly by its independent witness. If both streams
         # omit an acceptance there is no truthful identity for later payloads.
         if lost_unlocated:a.lack('R_unlocated_acceptance','Accepted response count is incomplete in both observations',case=cid,epoch=epoch,side=side)
         ambiguous={x for x in unknown_r+unknown_r_witness if x is not None and x not in r_cycles and x not in w_r}
@@ -484,17 +439,13 @@ def axi_observations(rows,kind,profile,a):
             if side==primary and response in (2,3) and not any(x['row'] is row for x in vga_errors):vga_errors.append(dict(case=cid,epoch=epoch,row=row,address=None,resp=response))
         counts['accepted_'+side+'_AR']+=len(ars);counts['accepted_'+side+'_R']+=len(responses)
         ledger[key]=dict(ar_cycles=all_ar,r_cycles=all_r,headers=headers,mapped=mapped,complete=not unit_logical_loss and not lost_unlocated and not ambiguous and unknown_header_cycle is None)
-    if kind=='unit':
-        unused=[r for r in rows if r['_kind']=='AXI_UNUSED'];captured={(r.get('case'),r.get('epoch'),r.get('cycle')) for r in unused}
-        for r in rows:
-            if r['_kind']=='PIN' and r.get('sample')=='pre' and (r.get('case'),r.get('epoch'),r.get('cycle')) not in captured:a.lack('write_channel_sample','An active read-only channel sample is absent',case=r.get('case'),epoch=r.get('epoch'),cycle=r.get('cycle'))
-        for r in unused:
-            for field in ('aw_valid','w_valid','b_valid'):a.equal('read_only_master',a.number(r,field,2),0,field=field,line=r['_line'])
+    unused=[r for r in rows if r['_kind']=='AXI_UNUSED'];captured={(r.get('case'),r.get('epoch'),r.get('cycle')) for r in unused}
+    for r in rows:
+        if r['_kind']=='PIN' and r.get('sample')=='pre' and (r.get('case'),r.get('epoch'),r.get('cycle')) not in captured:a.lack('write_channel_sample','An active read-only channel sample is absent',case=r.get('case'),epoch=r.get('epoch'),cycle=r.get('cycle'))
+    for r in unused:
+        for field in ('aw_valid','w_valid','b_valid'):a.equal('read_only_master',a.number(r,field,2),0,field=field,line=r['_line'])
     credit_observations(rows,kind,profile,a,accepted_ar,ar_stalls,inner_stalls,{k[0] for k,v in ledger.items() if not v['complete']})
-    if kind=='soc' and profile=='buserr':
-        sequence(a,'VGA_error_cases',[x['case'] for x in vga_errors],[911,912,913,914])
-        for x in vga_errors:
-            a.equal('VGA_error_address',x['address'],expected_start(kind,x['case']),case=x['case']);a.equal('VGA_error_code',x['resp'],None if x['case'] is None else 2 if x['case'] in (911,913) else 3,case=x['case'])
+
     a.details['actual_error_count']=len(vga_errors)
     a.details['AXI_counts']=dict(counts);a.details['_axi_ledger']=ledger
     return vga_errors
@@ -531,7 +482,7 @@ def credit_observations(rows,kind,profile,a,accepted_ar,ar_stalls,inner_stalls,u
     for key,count in accepted_ar.items():
         if count and key not in witnessed_ar:a.lack('credit_missing_accept','A real AR has no complete credit event',serial=key[0],cycle=key[1]);known=False
     if not seen:a.lack('credit_observation','No actual response-FIFO acceptance stream exists')
-    if kind=='unit' and profile=='flow':
+    if profile == 'flow':
         if not ar_stalls[(903,3)]:a.lack('AR_backpressure','The required actual AR hold did not occur')
         if not inner_stalls[(904,4)]:a.lack('response_backpressure','The required actual fetcher R hold did not occur')
         if not full[(904,4)]:a.lack('credit_full','The required full-credit rejection did not occur')
@@ -540,23 +491,19 @@ def credit_observations(rows,kind,profile,a,accepted_ar,ar_stalls,inner_stalls,u
 
 
 def lifecycle_observations(rows,kind,profile,configurations,a):
-    expected={('unit','timing'):[(901,1),(902,2)],('unit','flow'):[(903,3),(904,4),(905,5),(905,6)],('unit','restart'):[(906,7),(906,8),(907,9),(907,10),(908,11),(908,12)],('soc','pixels'):[(901,1),(902,2),(902,3)],('soc','reset'):[(903,4),(903,5)],('soc','buserr'):[(911,10),(912,11),(913,12),(914,13)]}[(kind,profile)]
+    expected={'timing':[(901,1),(902,2)],'flow':[(903,3),(904,4),(905,5),(905,6)],'restart':[(906,7),(906,8),(907,9),(907,10),(908,11),(908,12)]}[profile]
     sequence(a,'finite_configuration_epochs',configurations,expected)
-    aborted={(905,5),(908,11)} if kind=='unit' else {(903,4)} if profile=='reset' else set();primary='external' if kind=='unit' else 'vga'
+    aborted={(905,5),(908,11)};primary='external'
     drains=[r for r in rows if r['_kind']=='DRAIN'];sequence(a,'finite_drain_epochs',[(integer(r.get('case')),integer(r.get('epoch'))) for r in drains],[x for x in expected if x not in aborted])
     # AR/R counts come from the independently timed public acceptance ledger.
-    # A missing raw R with a complete v3 acceptance witness remains countable.
+    # A missing raw R with a complete independent acceptance witness remains countable.
     ledger=a.details.get('_axi_ledger',{});credit_states=a.details.get('_credit_states',{});coords=a.details.get('_raster_coordinates',{})
-    resets=[];serial=0;disable={};enable={};drained=set();gap_reports=[];physical=[]
+    resets=[];serial=0;disable={};enable={};drained=set();gap_reports=[]
     for row in rows:
         tag=row['_kind'];case=integer(row.get('case'));epoch=integer(row.get('epoch'));identity=(case,epoch);cycle=integer(row.get('cycle'))
         if tag=='RESET' and (row.get('asserted')=='1' or row.get('event')=='assert'):
             resets.append(row);serial+=1
-        if tag=='RESET_SAMPLE':
-            common=a.number(row,'common',2)
-            for field in ('vip_source','vga','llc'):a.equal('common_reset_binding',a.number(row,field,2),common,field=field,line=row['_line'])
-            a.equal('peer_reset_binding',a.number(row,'peer',2),None if common is None else 7 if common else 0,line=row['_line']);physical.append(row)
-        if tag=='MMIO' and (kind=='unit' or row.get('device')=='vga') and integer(row.get('write'),2)==1 and integer(row.get('error'),2)==0:
+        if tag == 'MMIO' and integer(row.get('write'), 2) == 1 and (integer(row.get('error'), 2) == 0):
             address=integer(row.get('addr'),16);value=integer(row.get('wdata'),16)
             if address is not None and address&63==0 and value is not None:
                 if value&1:enable[identity]=row
@@ -579,33 +526,22 @@ def lifecycle_observations(rows,kind,profile,configurations,a):
             else:a.equal('drained_public_credit',max(before)[1],0,case=case,epoch=epoch)
             for field in ('actual_ar_valid','actual_r_valid'):
                 if field in row:a.equal('drain_actual_channel_idle',a.number(row,field,2),0,field=field)
-            if kind=='soc' and identity in disable:
-                stopped_at=integer(disable[identity].get('cycle'))
-                a.equal('SoC_disabled_settle4096',None if stopped_at is None or cycle is None else cycle-stopped_at>=4096,True,case=case,epoch=epoch)
-            if kind=='unit':
-                # stop_and_drain counts64 complete cycles of queue/channel idle.
-                if values and cycle is not None:a.equal('unit_drain64clock_quiet',cycle-max(values)>=64,True,case=case,epoch=epoch)
-                else:a.lack('unit_drain_last_accept','The drain has no attributable public acceptance history',case=case,epoch=epoch)
-                a.equal('unit_drain_reported_quiet',a.number(row,'quiet'),64)
-                clocks=a.number(row,'clocks')
-                if clocks is not None:a.equal('unit_drain_finite_budget',64<=clocks<=4096,True)
+
+            if values and cycle is not None:a.equal('unit_drain64clock_quiet',cycle-max(values)>=64,True,case=case,epoch=epoch)
+            else:a.lack('unit_drain_last_accept','The drain has no attributable public acceptance history',case=case,epoch=epoch)
+            a.equal('unit_drain_reported_quiet',a.number(row,'quiet'),64)
+            clocks=a.number(row,'clocks')
+            if clocks is not None:a.equal('unit_drain_finite_budget',64<=clocks<=4096,True)
             if trust:drained.add(identity)
-    # Each reset is measured on actual reset pins. The SoC event release is
-    # deliberately later than physical release, after four stabilization clocks.
+    # Each public reset assertion is paired with its actual release.
     for index,assertion in enumerate(resets):
         start=a.number(assertion,'time_ps');stop=None
-        if kind=='unit':
-            releases=[r for r in rows if r['_kind']=='RESET' and r.get('asserted')=='0' and integer(r.get('time_ps')) is not None and start is not None and integer(r['time_ps'])>start]
-            if releases:stop=integer(releases[0]['time_ps'])
-        else:
-            low=[r for r in physical if r.get('common')=='0' and start is not None and integer(r.get('time_ps')) is not None and abs(integer(r['time_ps'])-start)<=1]
-            high=[r for r in physical if r.get('common')=='1' and start is not None and integer(r.get('time_ps')) is not None and integer(r['time_ps'])>start]
-            if not low:a.lack('physical_reset_assert','The common reset has no actual low-pin sample')
-            if high:stop=integer(high[0]['time_ps'])-1
+        releases=[r for r in rows if r['_kind']=='RESET' and r.get('asserted')=='0' and integer(r.get('time_ps')) is not None and start is not None and integer(r['time_ps'])>start]
+        if releases:stop=integer(releases[0]['time_ps'])
         a.equal('common_reset_five_clocks',None if stop is None or start is None else stop-start,25000,index=index)
-    expected_resets={'timing':2,'flow':4,'restart':4}[profile] if kind=='unit' else int(profile=='reset')
+    expected_resets=({'timing':2,'flow':4,'restart':4}[profile])
     finite_count(a,'common_reset_count',len(resets),expected_resets)
-    if kind=='unit' and profile=='restart':
+    if profile == 'restart':
         for case,epoch in ((906,7),(907,9)):
             positions=[r for r in a.details.get('stop_positions',[]) if (r['case'],r['epoch'])==(case,epoch)];finite_count(a,'selected_stop_position',len(positions),1,case=case)
             for pos in positions:
@@ -629,25 +565,19 @@ def lifecycle_observations(rows,kind,profile,configurations,a):
             gap_reports.append(dict(last_accepted=left,next_valid=right,empty_clocks=quiet))
         old=[r for r in resets if integer(r.get('case'))==908 and integer(r.get('epoch'))==11];finite_count(a,'unit_inflight_reset',len(old),1)
         for row in old:inflight_reset(rows,row,kind,a,ledger)
-    if kind=='unit' and profile=='flow':
+    if profile == 'flow':
         active=[c for c,p in coords.items() if (p['case'],p['epoch'])==(905,5) and p['running'] and p['frame']<2]
         if not active:a.lack('underflow_two_frame_window','No actual first-two-frame reference window exists')
         else:
             bad=[r for r in rows if r['_kind']=='AXI' and r.get('side')==primary and r.get('channel')=='R' and r.get('valid')=='1' and integer(r.get('cycle')) in active]
             if bad:a.bad('underflow_response_withheld','A real external RVALID appeared during the two withheld frames',line=bad[0]['_line'])
-    if kind=='soc' and profile=='reset':
-        finite_count(a,'soc_inflight_reset',len(resets),1)
-        for row in resets:inflight_reset(rows,row,kind,a,ledger)
-        reset_external_quiet(rows,resets,a)
-    if kind=='soc':
-        launch=[r for r in rows if r['_kind']=='LAUNCH'];finite_count(a,'saved_ELF_launch_count',len(launch),2 if profile=='reset' else 1)
-        for i,row in enumerate(launch):a.equal('saved_ELF_loader_reads',a.number(row,'loader_reads'),1);a.equal('saved_ELF_reset_epoch',a.number(row,'reset_epoch'),i)
-        if len(launch)==2:a.equal('saved_ELF_entry_preserved',a.number(launch[1],'saved_entry',16),a.number(launch[0],'saved_entry',16))
+
+
     a.details['lifecycle']=dict(configurations=configurations,drain_epochs=[(integer(r.get('case')),integer(r.get('epoch'))) for r in drains],common_resets=len(resets),response_gap=gap_reports)
 
 
 def inflight_reset(rows,reset,kind,a,ledger):
-    case=integer(reset.get('case'));epoch=integer(reset.get('epoch'));cycle=integer(reset.get('cycle'));time=integer(reset.get('time_ps'));primary='external' if kind=='unit' else 'vga'
+    case=integer(reset.get('case'));epoch=integer(reset.get('epoch'));cycle=integer(reset.get('cycle'));time=integer(reset.get('time_ps'));primary='external'
     if cycle is None and time is not None:
         cycle=max((integer(r.get('cycle')) for r in rows if integer(r.get('cycle')) is not None and integer(r.get('time_ps')) is not None and integer(r['time_ps'])<time),default=None)
     candidates=[state for (serial,c,e,side),state in ledger.items() if (c,e,side)==(case,epoch,primary)]
@@ -655,114 +585,27 @@ def inflight_reset(rows,reset,kind,a,ledger):
     state=candidates[0];ar=[c for c in state['ar_cycles'] if cycle is not None and c<=cycle];rs=[c for c in state['r_cycles'] if cycle is not None and c<=cycle]
     if not state['complete']:a.lack('reset_inflight_public_state','Missing accepted transactions prevent an outstanding-prefix conclusion')
     else:a.equal('reset_old_request_outstanding',len(ar)>len(rs),True)
-    if kind=='unit':
-        a.equal('reset_before_any_old_R',len(rs),0)
-        if ar:
-            actual=[r for r in rows if r['_kind']=='AXI' and r.get('side')==primary and r.get('channel')=='AR' and r.get('valid')=='1' and r.get('ready')=='1' and integer(r.get('case'))==case and integer(r.get('epoch'))==epoch and integer(r.get('cycle'))==ar[0]]
-            enables=[r for r in rows if r['_kind']=='MMIO' and integer(r.get('case'))==case and integer(r.get('epoch'))==epoch and r.get('write')=='1' and integer(r.get('addr'),16) is not None and integer(r['addr'],16)&63==0 and integer(r.get('wdata'),16) is not None and integer(r['wdata'],16)&1]
-            if not actual or not enables:a.lack('inflight_reset_schedule','The first accepted AR or enabling register write lacks an actual timestamp')
-            else:
-                first=a.number(actual[0],'time_ps');enable=a.number(enables[-1],'time_ps')
-                a.equal('first_AR_after_enable',None if first is None or enable is None else first>=enable,True)
-                # First poll after observing AR is at the following negedge
-                # +1ps; clocks(3), then reset_common adds one more negedge.
-                first_poll=max(first,enable)+2501 if first is not None and enable is not None else None
-                a.equal('reset_actual_source_schedule',time,None if first_poll is None else first_poll+4*5000)
-    # SoC reset timing is the first following negedge. It may have several SPM
-    # requests accepted, but at least one remains unreturned at the boundary.
-    else:
-        boundaries=[r for r in rows if r['_kind']=='RESET_BOUNDARY'];finite_count(a,'SPM_reset_boundary',len(boundaries),1)
-        for b in boundaries:
-            a.equal('SPM_only_reset_address',a.number(b,'accepted_addr',16),0x1400fff0)
-            bt=a.number(b,'time_ps')
-            a.equal('reset_following_negedge',None if time is None or bt is None else time-bt,2500)
-
-
-def reset_external_quiet(rows,resets,a):
-    for reset in resets:
-        time=a.number(reset,'time_ps');cycle=integer(reset.get('cycle'))
-        for side in ('ddr','peer'):
-            pending_r=0;pending_w=0;held={};last=None;known=True
-            for row in rows:
-                when=integer(row.get('time_ps'))
-                if row['_kind']!='AXI' or row.get('side')!=side or time is None or when is None or when>=time:continue
-                valid=a.number(row,'valid',2);ready=a.number(row,'ready',2);ch=row.get('channel')
-                if valid is None or valid==1 and ready is None:known=False;continue
-                if valid==1:
-                    last=when
-                    if ready==0:held[ch]=row
-                    elif ready==1:
-                        held.pop(ch,None)
-                        if ch=='AR':pending_r+=1
-                        elif ch=='R':
-                            lastbit=a.number(row,'last',2)
-                            if lastbit is None:known=False
-                            elif lastbit:
-                                if pending_r<=0:known=False
-                                else:pending_r-=1
-                        elif ch=='AW':pending_w+=1
-                        elif ch=='B':
-                            if pending_w<=0:known=False
-                            else:pending_w-=1
-                elif valid==0:held.pop(ch,None)
-            if not known:a.lack('reset_external_public_stream','Unknown public acceptances prevent a quiet conclusion',side=side)
-            else:
-                a.equal('reset_external_outstanding',(pending_r,pending_w),(0,0),side=side);a.equal('reset_external_stalled_channels',len(held),0,side=side)
-                if last is not None:a.equal('reset_external64clocks_quiet',time-last>=64*5000,True,side=side)
-            for boundary in (r for r in rows if r['_kind']=='RESET_BOUNDARY'):
-                for field in ('ddr_r','ddr_w','peer_r','peer_w'):a.equal('reset_boundary_public_counter',a.number(boundary,field),0,field=field)
-                quiet=a.number(boundary,'external_quiet')
-                if quiet is not None:a.equal('reset_boundary64clocks_quiet',quiet>=64,True)
+    a.equal('reset_before_any_old_R',len(rs),0)
+    if ar:
+        actual=[r for r in rows if r['_kind']=='AXI' and r.get('side')==primary and r.get('channel')=='AR' and r.get('valid')=='1' and r.get('ready')=='1' and integer(r.get('case'))==case and integer(r.get('epoch'))==epoch and integer(r.get('cycle'))==ar[0]]
+        enables=[r for r in rows if r['_kind']=='MMIO' and integer(r.get('case'))==case and integer(r.get('epoch'))==epoch and r.get('write')=='1' and integer(r.get('addr'),16) is not None and integer(r['addr'],16)&63==0 and integer(r.get('wdata'),16) is not None and integer(r['wdata'],16)&1]
+        if not actual or not enables:a.lack('inflight_reset_schedule','The first accepted AR or enabling register write lacks an actual timestamp')
+        else:
+            first=a.number(actual[0],'time_ps');enable=a.number(enables[-1],'time_ps')
+            a.equal('first_AR_after_enable',None if first is None or enable is None else first>=enable,True)
+            # First poll after observing AR is at the following negedge
+            # +1ps; clocks(3), then reset_common adds one more negedge.
+            first_poll=max(first,enable)+2501 if first is not None and enable is not None else None
+            a.equal('reset_actual_source_schedule',time,None if first_poll is None else first_poll+4*5000)
 
 
 def fault_observations(rows,kind,profile,errors,a):
-    expected=4 if kind=='soc' and profile=='buserr' else 0
-    arms=[r for r in rows if r['_kind']=='RERR_ARM'];clears=[r for r in rows if r['_kind']=='RERR_CLEAR'];after=[r for r in rows if r['_kind']=='RERR_AFTER']
-    for name,stream in (('arm',arms),('clear',clears),('after',after)):finite_count(a,'external_rerr_'+name,len(stream),expected)
-    # Bind actual external error R records independently by ID. A missing R
-    # cannot shift every later response to the next request.
-    ar=defaultdict(list);rs=defaultdict(list);external=[]
-    for r in rows:
-        if r['_kind']!='AXI' or r.get('side')!='ddr' or r.get('valid')!='1' or r.get('ready')!='1':continue
-        ch=r.get('channel')
-        if ch not in ('AR','R'):continue
-        ident=a.number(r,'id',16)
-        if ch=='AR':ar[ident].append(r)
-        elif ch=='R':rs[ident].append(r)
-    for ident,stream in rs.items():
-        headers=[];known=ident is not None
-        for request in ar[ident]:
-            address=a.number(request,'addr',16);length=a.number(request,'len',16);size=a.number(request,'size',16)
-            if None in (address,length,size):known=False;break
-            headers.extend((request,address+(1<<size)*i,i==length) for i in range(length+1))
-        aligned=known and len(headers)==len(stream)
-        if not aligned and any(integer(r.get('resp'),16) in (2,3) for r in stream):a.lack('DDR_error_request_alignment','Missing external headers/responses prevent an error-address conclusion',id=ident)
-        for i,r in enumerate(stream):
-            resp=a.number(r,'resp',16)
-            if resp not in (None,0,2,3):a.bad('external_response_code','Unexpected completed external RRESP',resp=resp,line=r['_line'])
-            if resp in (2,3):
-                if not expected:a.bad('unexpected_external_error','An unselected profile has a completed external R error',resp=resp,line=r['_line'])
-                external.append(dict(row=r,request=headers[i][0] if aligned else None,address=headers[i][1] if aligned else None,resp=resp))
-    finite_count(a,'external_error_count',len(external),expected)
-    if not expected:return
-    sequence(a,'external_error_cases',[integer(x['row'].get('case')) for x in external],[911,912,913,914])
-    for case in (911,912,913,914):
-        streams=[[r for r in seq if integer(r.get('case'))==case] for seq in (arms,clears,after)]
-        actual=[x for x in external if integer(x['row'].get('case'))==case];entry=[x for x in errors if x['case']==case]
-        for name,seq in zip(('arm','clear','after'),streams):finite_count(a,'one_rerr_'+name,len(seq),1,case=case)
-        if any(len(seq)!=1 for seq in streams) or len(actual)!=1:continue
-        arm,clear,end=[seq[0] for seq in streams];response=actual[0];start=expected_start('soc',case);code=2 if case in (911,913) else 3
-        for r in (arm,clear,end):a.equal('one_rerr_address',a.number(r,'address',16),start,case=case)
-        a.equal('one_rerr_armed_value',a.number(arm,'actual_code',16),code,case=case);a.equal('one_rerr_before_clear',a.number(clear,'actual_before',16),0,case=case);a.equal('one_rerr_after_clear',a.number(end,'actual_after',16),0,case=case)
-        a.equal('external_error_address',response['address'],start,case=case);a.equal('external_error_response',response['resp'],code,case=case)
-        if response['request'] is not None:
-            for field,want in (('len',0),('size',3)):a.equal('external_error_request_shape',a.number(response['request'],field,16),want,field=field,case=case)
-        rt=a.number(response['row'],'time_ps');at=a.number(arm,'time_ps');ct=a.number(clear,'time_ps');et=a.number(end,'time_ps')
-        a.equal('model_rerr_clear_plus_one_ps',ct,None if rt is None else rt+1,case=case);a.equal('model_rerr_after_same_time',et,ct,case=case)
-        a.equal('rerr_arm_before_actual_error',None if at is None or rt is None else at<rt,True,case=case)
-        finite_count(a,'VGA_external_error_binding',len(entry),1,case=case)
-        if entry:a.equal('VGA_external_same_error',(entry[0]['address'],entry[0]['resp']),(response['address'],response['resp']),case=case)
-    a.details['external_error_bindings']=[dict(case=integer(x['row'].get('case')),address=x['address'],resp=x['resp']) for x in external]
+    # Display profiles do not inject errors. Error-injection traces cannot be
+    # mistaken for the normal public timing, flow or restart stimulus.
+    for name,tag in (('arm','RERR_ARM'),('clear','RERR_CLEAR'),('after','RERR_AFTER')):
+        finite_count(a,'external_rerr_'+name,sum(r['_kind']==tag for r in rows),0)
+    external_errors=[r for r in rows if r['_kind']=='AXI' and r.get('side') not in ('external','fetcher') and r.get('channel')=='R' and r.get('valid')=='1' and r.get('ready')=='1' and integer(r.get('resp'),16) in (2,3)]
+    finite_count(a,'external_error_count',len(external_errors),0)
 
 
 def configuration_lifecycle(rows,kind,configurations,a):
@@ -785,7 +628,7 @@ def configuration_lifecycle(rows,kind,configurations,a):
                 # configure writes establish disabled state before any request.
                 a.bad('logical_AR_after_disable','A new logical ARVALID was asserted with actual enable clear',line=row['_line'])
         for row in group:
-            if row['_kind']=='MMIO' and (kind=='unit' or row.get('device')=='vga') and row.get('write')=='1' and row.get('error')=='0':
+            if row['_kind'] == 'MMIO' and row.get('write') == '1' and (row.get('error') == '0'):
                 address=integer(row.get('addr'),16)
                 if address is not None and address&63==0:
                     value=integer(row.get('wdata'),16);known=value is not None
@@ -805,49 +648,42 @@ def completion_observations(text,rows,kind,profile,a):
     done=[r for r in rows if r['_kind']=='DONE'];finite_count(a,'done_count',len(done),1)
     if done:
         row=done[0];a.equal('DONE_kind',row.get('kind'),kind);a.equal('DONE_profile',row.get('profile'),profile);a.equal('reported_error_count',a.number(row,'errors'),0)
-        actual=512 if profile in ('timing','pixels') else 256 if profile=='reset' else 1024 if profile=='buserr' else 768
+        actual=512 if profile=='timing' else 768
         a.equal('reported_formal_pixels',a.number(row,'formal_rgb'),actual)
         a.equal('reported_cases',a.number(row,'cases'),len(set(CASES[kind][profile])))
-        if kind=='unit':
-            a.equal('reported_black_pixels',a.number(row,'formal_black'),256 if profile=='flow' else 0)
-            for field,name in (('ar','accepted_external_AR'),('r','accepted_external_R')):a.equal('reported_actual_AXI_count',a.number(row,field),a.details.get('AXI_counts',{}).get(name,0),field=field)
-        else:
-            a.equal('reported_begins',a.number(row,'begins'),len(CASES[kind][profile]));a.equal('reported_ends',a.number(row,'ends'),1 if profile=='reset' else len(CASES[kind][profile]))
-            for field in ('vga_errors','external_errors','bus_pops'):a.equal('reported_actual_error_count',a.number(row,field),4 if profile=='buserr' else 0,field=field)
-            a.equal('reported_resets',a.number(row,'resets'),int(profile=='reset'))
-    marker=r'^E_VGA_UNIT_PASS profile='+re.escape(profile)+r'\s*$' if kind=='unit' else r'^\[SLINK\] SUCCESS\s*$'
+        a.equal('reported_black_pixels',a.number(row,'formal_black'),256 if profile=='flow' else 0)
+        for field,name in (('ar','accepted_external_AR'),('r','accepted_external_R')):a.equal('reported_actual_AXI_count',a.number(row,field),a.details.get('AXI_counts',{}).get(name,0),field=field)
+    marker=(r'^VGA_TEST_UNIT_PASS profile='+re.escape(profile)+r'\s*$')
     matches=list(re.finditer(marker,text,re.M));finite_count(a,'normal_success_marker',len(matches),1)
     finish=list(re.finditer(r'^\s*\$finish called from file[^\n]*',text,re.M));finite_count(a,'normal_finish',len(finish),1)
     stamps=list(re.finditer(r'^\s*\$finish at simulation time\s+(\d+)[^\n]*',text,re.M));finite_count(a,'normal_finish_time',len(stamps),1)
     if stamps:a.equal('positive_finish_time',int(stamps[0][1])>0,True)
     if matches and finish:a.equal('success_before_finish',matches[0].start()<finish[0].start(),True)
     if finish:
-        a.equal('finish_selected_top',('tb_e_vga_'+kind+'.sv' in finish[0][0] or (kind=='unit' and 'tb_capacity.sv' in finish[0][0])),True)
+        a.equal('finish_selected_top',any(name in finish[0][0] for name in ('tb_axi_vga_completion.sv','tb_vga_buserr.sv')),True)
     if finish and stamps:a.equal('finish_time_after_call',finish[0].start()<stamps[0].start(),True)
-    if kind=='soc':
-        eoc=[r for r in rows if r['_kind']=='EOC'];finite_count(a,'unique_normal_EOC',len(eoc),1)
-        if eoc:a.equal('actual_EOC',a.number(eoc[0],'actual',16),1)
+
     for line in text.splitlines():
-        if re.search(r'\[SLINK\].*(?:FAILED|return code\s+[1-9])|E_VGA_UNIT_FAIL|\b(?:TIMEOUT|RESOURCE_INTERRUPTED)\b',line):a.lack('original_run_incomplete','The original run did not normally complete',text=line)
+        if re.search(r'VGA_TEST_UNIT_FAIL|\b(?:TIMEOUT|RESOURCE_INTERRUPTED)\b',line):a.lack('original_run_incomplete','The original run did not normally complete',text=line)
 
 
 def review(kind,profile,run):
     a=Audit();verify_inputs(a);path=Path(run)/'stdout.log'
     if not path.is_file():a.lack('stdout','Original stdout is absent');return a.finish()
     before=path.stat();text=path.read_text(errors='replace');rows=rows_from_text(text,a);after=path.stat()
-    if kind=='soc':rows=soc_observer_cycles(rows,a)
+
     if (before.st_size,before.st_mtime_ns)!=(after.st_size,after.st_mtime_ns):a.lack('stdout_stability','Original stdout changed while scanning')
     a.details['stdout']=dict(path=str(path),sha256=sha(path),bytes=after.st_size)
     meta=[r for r in rows if r['_kind']=='META'];finite_count(a,'meta_count',len(meta),1)
     if meta:a.equal('profile_binding',meta[0].get('profile'),profile);a.equal('kind_binding',meta[0].get('kind'),kind)
     begin=[integer(r.get('case')) for r in rows if r['_kind']=='CASE' and r.get('event')=='begin']
     end=[integer(r.get('case')) for r in rows if r['_kind']=='CASE' and r.get('event')=='end']
-    sequence(a,'case_begin',begin,CASES[kind][profile]);sequence(a,'case_end',end,[903] if kind=='soc' and profile=='reset' else CASES[kind][profile])
+    sequence(a,'case_begin',begin,CASES[kind][profile]);sequence(a,'case_end',end,(CASES[kind][profile]))
     configurations=register_observations(rows,kind,a);pin_observations(rows,kind,profile,a);vga_errors=axi_observations(rows,kind,profile,a)
     lifecycle_observations(rows,kind,profile,configurations,a)
     configuration_lifecycle(rows,kind,configurations,a);fault_observations(rows,kind,profile,vga_errors,a)
     completion_observations(text,rows,kind,profile,a)
-    a.details['version']='E9 complete offline checker v2; actual DUT review is separate'
+    a.details['version']='Public axi_vga completion checker'
     return a.finish()
 
 def main():
