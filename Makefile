@@ -46,3 +46,7 @@ clean_vsim:
 vsim: clean_vsim bender
 	cd vsim && ./compile.sh
 	cd vsim && ./run.sh
+
+.PHONY: test-retained-completion
+test-retained-completion:
+	./test/retained_completion/run.sh
