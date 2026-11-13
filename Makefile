@@ -49,4 +49,4 @@ vsim: clean_vsim bender
 
 .PHONY: test-retained-completion
 test-retained-completion:
-	./test/retained_completion/run.sh
+	bash ./test/retained_completion/run.sh

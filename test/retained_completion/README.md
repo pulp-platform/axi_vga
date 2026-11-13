@@ -150,5 +150,5 @@ same records. The checker accepts the two public top files
 `tb_axi_vga_completion.sv` and `tb_vga_buserr.sv`. Its scope is limited to the
 listed unit profiles.
 
-With the dependency and output variables below set, `make test-retained-completion`
+With the dependency and output variables set as shown above, `make test-retained-completion`
 runs the existing functional runner from the repository root.
